@@ -58,7 +58,7 @@ export function MusicLibrary({
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border dark:border-gray-700">
                 <p className="text-gray-600 dark:text-gray-300 mb-4">
                   Usa la búsqueda para encontrar música de YouTube. Las canciones se guardan
-                  en cache para una reproducción más rápida.
+                  en cache para una reproducción más rápida. Tu última canción y posición se restaurarán automáticamente.
                 </p>
                 <button
                   onClick={() => onSearch("música popular 2024")}

@@ -19,6 +19,9 @@ export interface Settings {
   repeatMode: "off" | "all" | "one";
   isShuffle: boolean;
   isDarkMode: boolean;
+  lastPlayedTrack?: Track | null;
+  lastPlayedPosition?: number;
+  lastPlayedTime?: number; // timestamp when app was closed
 }
 
 export interface SettingsAPI {

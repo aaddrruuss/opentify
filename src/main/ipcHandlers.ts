@@ -138,7 +138,10 @@ const defaultSettings = {
   isMuted: false,
   repeatMode: "off", // "off" | "all" | "one"
   isShuffle: false,
-  isDarkMode: false
+  isDarkMode: false,
+  lastPlayedTrack: null,
+  lastPlayedPosition: 0,
+  lastPlayedTime: null
 };
 
 // Función para asegurar que el directorio de configuraciones existe

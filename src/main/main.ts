@@ -52,6 +52,11 @@ app.on("ready", () => {
   setupIpcHandlers();
 });
 
+app.on("before-quit", () => {
+  // Las configuraciones se guardan automáticamente mediante los efectos de React
+  console.log("App closing - settings should be saved automatically");
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();

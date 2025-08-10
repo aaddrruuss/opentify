@@ -23,6 +23,9 @@ export function App() {
   const [isShuffle, setIsShuffle] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [playlist, setPlaylist] = useState<Track[]>([]); // Current playlist for repeat all
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [isRestoringTrack, setIsRestoringTrack] = useState(false);
 
   // Cargar configuraciones al inicio
   useEffect(() => {
@@ -36,6 +39,20 @@ export function App() {
         setIsShuffle(settings.isShuffle);
         setIsDarkMode(settings.isDarkMode);
         
+        // Restaurar última canción reproducida si existe
+        if (settings.lastPlayedTrack && settings.lastPlayedPosition !== undefined) {
+          const timeSinceLastPlay = Date.now() - (settings.lastPlayedTime || 0);
+          const maxRestoreTime = 24 * 60 * 60 * 1000; // 24 horas en millisegundos
+          
+          // Solo restaurar si no ha pasado más de 24 horas
+          if (timeSinceLastPlay < maxRestoreTime) {
+            console.log("Restaurando última canción:", settings.lastPlayedTrack.title, "en posición:", settings.lastPlayedPosition);
+            setCurrentTrack(settings.lastPlayedTrack);
+            setCurrentTime(settings.lastPlayedPosition);
+            setIsRestoringTrack(true);
+          }
+        }
+        
         console.log("Configuraciones cargadas desde archivo:", settings);
         setSettingsLoaded(true);
       } catch (error) {
@@ -47,7 +64,7 @@ export function App() {
     loadInitialSettings();
   }, []);
 
-  // Guardar configuraciones cuando cambien (solo después de cargar las iniciales)
+  // Guardar configuraciones cuando cambien
   useEffect(() => {
     if (!settingsLoaded) return;
 
@@ -56,20 +73,22 @@ export function App() {
       isMuted,
       repeatMode,
       isShuffle,
-      isDarkMode
+      isDarkMode,
+      lastPlayedTrack: currentTrack,
+      lastPlayedPosition: currentTime,
+      lastPlayedTime: Date.now()
     };
 
     const saveSettings = async () => {
       try {
         await window.settingsAPI.saveSettings(settings);
-        console.log("Configuraciones guardadas:", settings);
       } catch (error) {
         console.error("Error guardando configuraciones:", error);
       }
     };
 
     saveSettings();
-  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, settingsLoaded]);
+  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded]);
 
   // Aplicar modo oscuro
   useEffect(() => {
@@ -89,15 +108,31 @@ export function App() {
 
     musicService.onEnded(() => {
       setIsPlaying(false);
-      // Implementar lógica de repetición y siguiente canción
       handleSongEnded();
     });
 
     // Establecer volumen inicial cuando las configuraciones estén cargadas
     if (settingsLoaded) {
       musicService.setVolume(isMuted ? 0 : volume);
+      
+      // Si estamos restaurando una canción, cargarla y posicionarla
+      if (isRestoringTrack && currentTrack) {
+        const restoreTrack = async () => {
+          try {
+            await musicService.play(currentTrack);
+            musicService.pause(); // Pausar inmediatamente
+            musicService.seek(currentTime); // Ir a la posición guardada
+            setIsRestoringTrack(false);
+            console.log("Canción restaurada exitosamente");
+          } catch (error) {
+            console.error("Error restaurando canción:", error);
+            setIsRestoringTrack(false);
+          }
+        };
+        restoreTrack();
+      }
     }
-  }, [settingsLoaded, volume, isMuted]);
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, currentTime]);
 
   const handleSongEnded = () => {
     if (repeatMode === "one") {
@@ -106,7 +141,7 @@ export function App() {
         handleTrackSelect(currentTrack);
       }
     } else if (repeatMode === "all") {
-      // Repetir toda la lista (implementar lógica de siguiente canción)
+      // Reproducir siguiente canción en la playlist
       handleSkipForward();
     }
     // Si repeatMode === "off", no hacer nada (canción termina)
@@ -134,11 +169,18 @@ export function App() {
     }
   };
 
-  const handleTrackSelect = async (track: Track) => {
+  const handleTrackSelect = async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
     try {
       setCurrentTrack(track);
       setCurrentTime(0);
       setDuration(0);
+      
+      // Actualizar playlist si se proporciona
+      if (fromPlaylist) {
+        setPlaylist(fromPlaylist);
+        setCurrentTrackIndex(trackIndex || 0);
+      }
+      
       await musicService.play(track);
       setIsPlaying(true);
     } catch (error) {
@@ -152,18 +194,18 @@ export function App() {
 
     setIsLoading(true);
     
-    // Limpiar la query para mostrar (quitar "audio" automático para la visualización)
     const displayQuery = query.replace(/ audio$/, '').trim();
     setSearchQuery(displayQuery);
     
     try {
-      console.log("Buscando con query:", query); // Debug: mostrar query real
       const results = await window.musicAPI.searchMusic(query);
-      console.log("Resultados obtenidos:", results.length); // Debug: mostrar cantidad de resultados
       setSearchResults(results);
+      // Actualizar playlist con los resultados de búsqueda
+      setPlaylist(results);
     } catch (error) {
       console.error('Error en búsqueda:', error);
       setSearchResults([]);
+      setPlaylist([]);
     } finally {
       setIsLoading(false);
     }
@@ -186,16 +228,48 @@ export function App() {
   };
 
   const handleSkipForward = () => {
-    // Implementar lógica para siguiente canción
-    console.log('Siguiente canción');
+    if (playlist.length === 0) return;
+    
+    let nextIndex;
+    if (isShuffle) {
+      // Modo aleatorio: seleccionar índice aleatorio diferente al actual
+      const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
+      if (availableIndexes.length === 0) return;
+      nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+    } else {
+      // Modo normal: siguiente canción
+      nextIndex = (currentTrackIndex + 1) % playlist.length;
+    }
+    
+    const nextTrack = playlist[nextIndex];
+    if (nextTrack) {
+      handleTrackSelect(nextTrack, playlist, nextIndex);
+    }
   };
 
   const handleSkipBack = () => {
-    // Implementar lógica para canción anterior
+    // Si llevamos más de 3 segundos, reiniciar la canción actual
     if (currentTime > 3) {
       handleSeek(0);
+      return;
+    }
+    
+    if (playlist.length === 0) return;
+    
+    let prevIndex;
+    if (isShuffle) {
+      // Modo aleatorio: seleccionar índice aleatorio diferente al actual
+      const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
+      if (availableIndexes.length === 0) return;
+      prevIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
-      console.log('Canción anterior');
+      // Modo normal: canción anterior
+      prevIndex = currentTrackIndex === 0 ? playlist.length - 1 : currentTrackIndex - 1;
+    }
+    
+    const prevTrack = playlist[prevIndex];
+    if (prevTrack) {
+      handleTrackSelect(prevTrack, playlist, prevIndex);
     }
   };
 
@@ -223,7 +297,10 @@ export function App() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
           <MusicLibrary
-            onTrackSelect={handleTrackSelect}
+            onTrackSelect={(track) => {
+              const trackIndex = searchResults.findIndex(t => t.id === track.id);
+              handleTrackSelect(track, searchResults, trackIndex);
+            }}
             currentView={currentView}
             searchResults={searchResults}
             onSearch={handleSearch}
