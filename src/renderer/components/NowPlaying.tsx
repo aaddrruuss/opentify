@@ -9,33 +9,24 @@ interface NowPlayingProps {
 
 export function NowPlaying({ track, isPlaying, isDownloading = false }: NowPlayingProps) {
   const getImageUrl = () => {
-    console.log("NowPlaying track data:", track); // Debug log
-    
     // Priorizar thumbnail sobre cover
     let imageUrl = track.thumbnail || track.cover;
     
     if (imageUrl) {
-      console.log("NowPlaying using image URL:", imageUrl); // Debug log
       return imageUrl;
     }
     
     // Construir URL de YouTube si tenemos el ID
     if (track.id && track.id !== 'demo1') {
-      const youtubeUrl = `https://img.youtube.com/vi/${track.id}/hqdefault.jpg`;
-      console.log("NowPlaying using YouTube URL:", youtubeUrl); // Debug log
-      return youtubeUrl;
+      return `https://img.youtube.com/vi/${track.id}/hqdefault.jpg`;
     }
     
-    const fallbackUrl = 'https://via.placeholder.com/56x56/cccccc/666666?text=♪';
-    console.log("NowPlaying using fallback URL:", fallbackUrl); // Debug log
-    return fallbackUrl;
+    return 'https://via.placeholder.com/56x56/cccccc/666666?text=♪';
   };
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const target = e.target as HTMLImageElement;
     const currentSrc = target.src;
-    
-    console.log("NowPlaying image error for:", currentSrc); // Debug log
     
     // Secuencia de fallbacks para YouTube
     if (currentSrc.includes('maxresdefault')) {
@@ -45,15 +36,12 @@ export function NowPlaying({ track, isPlaying, isDownloading = false }: NowPlayi
     } else if (currentSrc.includes('mqdefault')) {
       target.src = `https://img.youtube.com/vi/${track.id}/default.jpg`;
     } else {
-      // Último fallback
       target.src = 'https://via.placeholder.com/56x56/cccccc/666666?text=♪';
     }
-    
-    console.log("NowPlaying fallback to:", target.src); // Debug log
   };
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.log("NowPlaying image loaded successfully:", e.currentTarget.src); // Debug log
+    // Remover logging excesivo
   };
 
   return (
@@ -76,13 +64,15 @@ export function NowPlaying({ track, isPlaying, isDownloading = false }: NowPlayi
       <div className="flex-1 min-w-0">
         <h3 className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
           {track.title}
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+          {track.artist}
           {isDownloading && (
-            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-              (Descargando...)
+            <span className="ml-2 text-[#2196F3] font-medium">
+              • Descargando...
             </span>
           )}
-        </h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{track.artist}</p>
+        </p>
       </div>
       <button className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#2196F3] dark:hover:text-[#2196F3] flex-shrink-0 transition-colors">
         <svg

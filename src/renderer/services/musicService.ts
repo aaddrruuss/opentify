@@ -10,31 +10,33 @@ class MusicService {
   async play(track: Track): Promise<void> {
     try {
       this.isLoadingTrack = true;
+      console.log("MusicService: Iniciando carga de", track.title);
+      
+      // Limpiar cualquier reproducción anterior inmediatamente
+      this.cleanup();
       
       // Si es la misma canción y ya está cargada, solo reproducir
-      if (this.currentTrack && this.currentTrack.id === track.id && this.audio && !this.audio.paused) {
+      if (this.currentTrack && this.currentTrack.id === track.id && this.audio && this.audio.paused) {
         await this.audio.play();
         this.isLoadingTrack = false;
+        console.log("MusicService: Reanudando canción existente");
         return;
       }
 
-      // Obtener la ruta local del archivo (desde cache o descarga)
-      const songPath = await window.musicAPI.getSongPath(track.id, track.title);
+      // Obtener la ruta local del archivo con timeout
+      console.log("MusicService: Solicitando descarga...");
+      const songPath = await Promise.race([
+        window.musicAPI.getSongPath(track.id, track.title),
+        new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('Download timeout')), 25000)
+        )
+      ]);
 
       if (!songPath) {
         throw new Error("No se pudo obtener la ruta de la canción");
       }
 
-      console.log("Reproduciendo desde:", songPath);
-
-      // Limpiar audio anterior si existe
-      if (this.audio) {
-        this.audio.pause();
-        this.audio.removeEventListener("timeupdate", this.handleTimeUpdate);
-        this.audio.removeEventListener("ended", this.handleEnded);
-        this.audio.removeEventListener("loadedmetadata", this.handleLoadedMetadata);
-        this.audio.src = "";
-      }
+      console.log("MusicService: Descarga completada, cargando audio desde:", songPath);
 
       // Crear nuevo elemento de audio
       this.audio = new Audio(songPath.replace(/\\/g, '/'));
@@ -48,50 +50,78 @@ class MusicService {
       // Configurar volumen actual
       this.setVolume(this.getCurrentVolume());
 
-      // Esperar a que se carguen los metadatos antes de reproducir
-      await new Promise<void>((resolve, reject) => {
-        if (!this.audio) {
-          reject(new Error("Audio element not available"));
-          return;
-        }
-
-        const onCanPlay = () => {
-          if (this.audio) {
-            this.audio.removeEventListener("canplay", onCanPlay);
-            this.audio.removeEventListener("error", onError);
-            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-            resolve();
+      // Esperar a que se carguen los metadatos Y esté listo para reproducir
+      console.log("MusicService: Esperando metadatos...");
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          if (!this.audio) {
+            reject(new Error("Audio element not available"));
+            return;
           }
-        };
 
-        const onLoadedMetadata = () => {
-          // Los metadatos están cargados, continuar con canplay
-        };
+          const onCanPlay = () => {
+            if (this.audio) {
+              this.audio.removeEventListener("canplay", onCanPlay);
+              this.audio.removeEventListener("error", onError);
+              this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+              console.log("MusicService: Audio listo para reproducir");
+              resolve();
+            }
+          };
 
-        const onError = (error: Event) => {
-          if (this.audio) {
-            this.audio.removeEventListener("canplay", onCanPlay);
-            this.audio.removeEventListener("error", onError);
-            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-          }
-          reject(new Error("Failed to load audio"));
-        };
+          const onLoadedMetadata = () => {
+            console.log("MusicService: Metadatos cargados");
+          };
 
-        this.audio.addEventListener("canplay", onCanPlay);
-        this.audio.addEventListener("loadedmetadata", onLoadedMetadata);
-        this.audio.addEventListener("error", onError);
+          const onError = (error: Event) => {
+            if (this.audio) {
+              this.audio.removeEventListener("canplay", onCanPlay);
+              this.audio.removeEventListener("error", onError);
+              this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+            }
+            console.error("MusicService: Error cargando audio");
+            reject(new Error("Failed to load audio"));
+          };
 
-        // Cargar el audio
-        this.audio.load();
-      });
+          this.audio.addEventListener("canplay", onCanPlay);
+          this.audio.addEventListener("loadedmetadata", onLoadedMetadata);
+          this.audio.addEventListener("error", onError);
 
-      // Reproducir
-      await this.audio.play();
+          // Cargar el audio
+          this.audio.load();
+        }),
+        new Promise<void>((_, reject) => 
+          setTimeout(() => reject(new Error('Audio load timeout')), 10000)
+        )
+      ]);
+
+      // Reproducir solo si no se ha iniciado otra carga
+      if (this.currentTrack?.id === track.id) {
+        console.log("MusicService: Iniciando reproducción...");
+        await this.audio.play();
+        console.log("MusicService: Reproducción iniciada exitosamente");
+      }
+      
     } catch (error) {
-      console.error("Error al reproducir:", error);
+      console.error("MusicService: Error en play:", error);
+      this.cleanup();
       throw error;
     } finally {
       this.isLoadingTrack = false;
+    }
+  }
+
+  // Método para limpiar recursos de audio
+  private cleanup(): void {
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.removeEventListener("timeupdate", this.handleTimeUpdate);
+      this.audio.removeEventListener("ended", this.handleEnded);
+      this.audio.removeEventListener("loadedmetadata", this.handleLoadedMetadata);
+      this.audio.removeEventListener("playing", this.handlePlaying);
+      this.audio.removeEventListener("pause", this.handlePause);
+      this.audio.src = "";
+      this.audio = null;
     }
   }
 
@@ -101,12 +131,10 @@ class MusicService {
     }
   }
 
-  resume(): void {
-    if (this.audio && this.audio.paused && !this.isLoadingTrack) {
-      this.audio.play().catch(error => {
-        console.error("Error al reanudar:", error);
-      });
-    }
+  // Método para detener completamente la reproducción
+  stop(): void {
+    this.cleanup();
+    this.currentTrack = null;
   }
 
   private currentVolume: number = 80;
@@ -189,16 +217,28 @@ class MusicService {
     }
   };
 
+  private handlePlaying = () => {
+    console.log("MusicService: Audio playing event fired");
+    // Forzar actualización de estado cuando el audio realmente empiece
+    if (this.timeUpdateCallback && this.audio) {
+      this.timeUpdateCallback(this.audio.currentTime);
+    }
+  };
+
+  private handlePause = () => {
+    console.log("MusicService: Audio paused event fired");
+    // Forzar actualización de estado cuando el audio se pause
+    if (this.timeUpdateCallback && this.audio) {
+      this.timeUpdateCallback(this.audio.currentTime);
+    }
+  };
+
   onTimeUpdate(callback: (time: number) => void): void {
     this.timeUpdateCallback = callback;
   }
 
   onEnded(callback: () => void): void {
     this.endedCallback = callback;
-  }
-
-  isPlaying(): boolean {
-    return this.audio ? !this.audio.paused : false;
   }
 
   getCurrentTrack(): Track | null {
@@ -220,23 +260,22 @@ class MusicService {
     try {
       this.isLoadingTrack = true;
       
-      // Obtener la ruta local del archivo (desde cache o descarga)
-      const songPath = await window.musicAPI.getSongPath(track.id, track.title);
+      // Limpiar cualquier audio anterior
+      this.cleanup();
+      
+      // Obtener la ruta con timeout más corto para restauración
+      const songPath = await Promise.race([
+        window.musicAPI.getSongPath(track.id, track.title),
+        new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('Restore timeout')), 15000)
+        )
+      ]);
 
       if (!songPath) {
-        throw new Error("No se pudo obtener la ruta de la canción");
+        throw new Error("No se pudo obtener la ruta para restauración");
       }
 
       console.log("Cargando para restauración desde:", songPath);
-
-      // Limpiar audio anterior si existe
-      if (this.audio) {
-        this.audio.pause();
-        this.audio.removeEventListener("timeupdate", this.handleTimeUpdate);
-        this.audio.removeEventListener("ended", this.handleEnded);
-        this.audio.removeEventListener("loadedmetadata", this.handleLoadedMetadata);
-        this.audio.src = "";
-      }
 
       // Crear nuevo elemento de audio
       this.audio = new Audio(songPath.replace(/\\/g, '/'));
@@ -250,39 +289,45 @@ class MusicService {
       // Configurar volumen actual
       this.setVolume(this.getCurrentVolume());
 
-      // Esperar a que se carguen los metadatos SIN reproducir
-      await new Promise<void>((resolve, reject) => {
-        if (!this.audio) {
-          reject(new Error("Audio element not available"));
-          return;
-        }
-
-        const onLoadedMetadata = () => {
-          if (this.audio) {
-            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-            this.audio.removeEventListener("error", onError);
-            console.log("Metadatos cargados para restauración");
-            resolve();
+      // Esperar a que se carguen los metadatos SIN reproducir con timeout
+      await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          if (!this.audio) {
+            reject(new Error("Audio element not available"));
+            return;
           }
-        };
 
-        const onError = (error: Event) => {
-          if (this.audio) {
-            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-            this.audio.removeEventListener("error", onError);
-          }
-          reject(new Error("Failed to load audio for restore"));
-        };
+          const onLoadedMetadata = () => {
+            if (this.audio) {
+              this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+              this.audio.removeEventListener("error", onError);
+              console.log("Metadatos cargados para restauración");
+              resolve();
+            }
+          };
 
-        this.audio.addEventListener("loadedmetadata", onLoadedMetadata);
-        this.audio.addEventListener("error", onError);
+          const onError = (error: Event) => {
+            if (this.audio) {
+              this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+              this.audio.removeEventListener("error", onError);
+            }
+            reject(new Error("Failed to load audio for restore"));
+          };
 
-        // Cargar el audio SIN reproducir - solo cargar metadatos
-        this.audio.load();
-      });
+          this.audio.addEventListener("loadedmetadata", onLoadedMetadata);
+          this.audio.addEventListener("error", onError);
+
+          // Cargar el audio SIN reproducir - solo cargar metadatos
+          this.audio.load();
+        }),
+        new Promise<void>((_, reject) => 
+          setTimeout(() => reject(new Error('Metadata load timeout')), 5000)
+        )
+      ]);
 
     } catch (error) {
       console.error("Error al cargar para restauración:", error);
+      this.cleanup();
       throw error;
     } finally {
       this.isLoadingTrack = false;
@@ -295,6 +340,87 @@ class MusicService {
 
   isLoadingCurrentTrack(): boolean {
     return this.isLoadingTrack;
+  }
+
+  resume(): void {
+    if (this.audio && this.audio.paused && !this.isLoadingTrack) {
+      this.audio.play().catch(error => {
+        console.error("Error al reanudar:", error);
+      });
+    }
+  }
+
+  isPlaying(): boolean {
+    // REMOVER el logging excesivo que causa problemas
+    return this.audio ? !this.audio.paused && !this.audio.ended : false;
+  }
+
+  async loadAudioOnly(track: Track): Promise<void> {
+    try {
+      this.isLoadingTrack = true;
+      console.log("MusicService: Cargando audio de", track.title);
+      
+      // Limpiar cualquier reproducción anterior
+      this.cleanup();
+      
+      // Obtener la ruta del archivo
+      const songPath = await window.musicAPI.getSongPath(track.id, track.title);
+
+      if (!songPath) {
+        throw new Error("No se pudo obtener la ruta de la canción");
+      }
+
+      console.log("MusicService: Audio desde:", songPath);
+
+      // Crear nuevo elemento de audio
+      this.audio = new Audio(songPath.replace(/\\/g, '/'));
+      this.currentTrack = track;
+
+      // Configurar event listeners incluyendo 'playing' para mejor detección
+      this.audio.addEventListener("timeupdate", this.handleTimeUpdate);
+      this.audio.addEventListener("ended", this.handleEnded);
+      this.audio.addEventListener("loadedmetadata", this.handleLoadedMetadata);
+      this.audio.addEventListener("playing", this.handlePlaying);
+      this.audio.addEventListener("pause", this.handlePause);
+
+      // Configurar volumen actual
+      this.setVolume(this.getCurrentVolume());
+
+      // Esperar a que se carguen los metadatos
+      await new Promise<void>((resolve, reject) => {
+        if (!this.audio) {
+          reject(new Error("Audio element not available"));
+          return;
+        }
+
+        const onCanPlay = () => {
+          if (this.audio) {
+            this.audio.removeEventListener("canplay", onCanPlay);
+            this.audio.removeEventListener("error", onError);
+            resolve();
+          }
+        };
+
+        const onError = (error: Event) => {
+          if (this.audio) {
+            this.audio.removeEventListener("canplay", onCanPlay);
+            this.audio.removeEventListener("error", onError);
+          }
+          reject(new Error("Failed to load audio"));
+        };
+
+        this.audio.addEventListener("canplay", onCanPlay);
+        this.audio.addEventListener("error", onError);
+        this.audio.load();
+      });
+      
+    } catch (error) {
+      console.error("MusicService: Error in loadAudioOnly:", error);
+      this.cleanup();
+      throw error;
+    } finally {
+      this.isLoadingTrack = false;
+    }
   }
 }
 

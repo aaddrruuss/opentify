@@ -28,7 +28,10 @@ export function App() {
   const [isRestoringTrack, setIsRestoringTrack] = useState(false);
   const [isPreloadingNext, setIsPreloadingNext] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false); // Track if current song is downloading
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false); // Track if audio is loading after download
   const [savedPosition, setSavedPosition] = useState(0); // Store saved position separately
+  const [lastActionTime, setLastActionTime] = useState(0);
+  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
 
   // Cargar configuraciones al inicio
   useEffect(() => {
@@ -108,9 +111,15 @@ export function App() {
       setCurrentTime(time);
       setDuration(musicService.getDuration());
       
-      // Precargar la siguiente canción cuando llevemos 30% de la canción actual
-      const progressPercentage = musicService.getDuration() > 0 ? (time / musicService.getDuration()) * 100 : 0;
-      if (progressPercentage > 30 && !isPreloadingNext && playlist.length > 0 && !isDownloading) {
+      // Sincronizar estado de reproducción cada vez que se actualiza el tiempo
+      const actualIsPlaying = musicService.isPlaying();
+      if (actualIsPlaying !== isPlaying) {
+        setIsPlaying(actualIsPlaying);
+      }
+      
+      // Precargar la siguiente canción INMEDIATAMENTE cuando empiece la reproducción
+      // Solo necesitamos verificar que haya comenzado (time > 1 segundo)
+      if (time > 1 && !isPreloadingNext && playlist.length > 0 && !isDownloading) {
         preloadNextTrack();
       }
     });
@@ -129,6 +138,7 @@ export function App() {
         const restoreTrack = async () => {
           try {
             setIsDownloading(true);
+            console.log("Intentando restaurar canción:", currentTrack.title);
             
             // Usar el método específico para restauración que NO reproduce automáticamente
             await musicService.loadTrackForRestore(currentTrack);
@@ -151,15 +161,17 @@ export function App() {
             
           } catch (error) {
             console.error("Error restaurando canción:", error);
+            // Si falla la restauración, limpiar el estado pero mantener la UI
             setIsRestoringTrack(false);
             setIsDownloading(false);
             setSavedPosition(0);
+            // No limpiar currentTrack para que la UI se mantenga
           }
         };
         restoreTrack();
       }
     }
-  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, isPreloadingNext, playlist.length, isDownloading]);
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, isPreloadingNext, playlist.length, isDownloading, isPlaying]);
 
   // Función para precargar la siguiente canción
   const preloadNextTrack = async () => {
@@ -208,81 +220,144 @@ export function App() {
   };
 
   const handlePlayPause = async () => {
-    if (!currentTrack || isDownloading) return;
+    // Only block if downloading, not if just loading audio
+    if (!currentTrack || isDownloading) {
+      console.log("Play/pause bloqueado - descarga en progreso");
+      return;
+    }
 
     try {
       if (isPlaying) {
         musicService.pause();
         setIsPlaying(false);
       } else {
-        // Si hay una canción cargada y pausada, reanudar
-        if (musicService.getCurrentTrack()?.id === currentTrack.id) {
-          // Verificar si la canción está realmente cargada
-          const currentAudioTime = musicService.getCurrentTime();
-          const audioDuration = musicService.getDuration();
-          
-          if (audioDuration > 0) {
-            // La canción está cargada, solo reanudar
-            musicService.resume();
-            setIsPlaying(true);
-          } else {
-            // La canción no está completamente cargada, cargarla de nuevo
-            setIsDownloading(true);
-            await musicService.play(currentTrack);
-            setIsDownloading(false);
-            setIsPlaying(true);
-          }
-        } else {
-          // Cargar y reproducir una nueva canción
-          setIsDownloading(true);
-          await musicService.play(currentTrack);
-          setIsDownloading(false);
+        const serviceCurrentTrack = musicService.getCurrentTrack();
+        const audioDuration = musicService.getDuration();
+        
+        // Si el servicio tiene la misma canción cargada y con duración válida
+        if (serviceCurrentTrack?.id === currentTrack.id && audioDuration > 0) {
+          // Solo reanudar
+          musicService.resume();
           setIsPlaying(true);
+        } else {
+          // Cargar y reproducir la canción - marcar como loading audio (no downloading)
+          setIsLoadingAudio(true);
+          try {
+            await musicService.play(currentTrack);
+            setIsPlaying(true);
+            setDuration(musicService.getDuration());
+          } finally {
+            setIsLoadingAudio(false);
+          }
         }
       }
     } catch (error) {
       console.error('Error al reproducir/pausar:', error);
       setIsPlaying(false);
-      setIsDownloading(false);
+      setIsLoadingAudio(false);
     }
   };
 
   const handleTrackSelect = async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
-    // Prevenir cambios múltiples mientras se descarga
-    if (isDownloading) {
+    const now = Date.now();
+    
+    if (now - lastActionTime < 500) {
+      console.log("Acción muy rápida, ignorando...");
+      return;
+    }
+    
+    if (isDownloading || pendingTrackId) {
       console.log("Descarga en progreso, ignorando selección de track");
       return;
     }
 
+    setLastActionTime(now);
+    setPendingTrackId(track.id);
+
     try {
-      setIsDownloading(true);
-      setIsPreloadingNext(false); // Reset preload flag
-      setSavedPosition(0); // Clear any saved position when manually selecting
+      // Detener cualquier reproducción actual
+      musicService.stop();
+      setIsPlaying(false);
+      setIsLoadingAudio(false);
       
-      // Solo actualizar la UI después de que la canción esté lista para reproducir
-      console.log("Iniciando descarga/carga de:", track.title);
+      // Resetear flag de precarga para permitir nueva precarga
+      setIsPreloadingNext(false);
       
-      // Actualizar playlist si se proporciona
+      // Actualizar UI inmediatamente
+      setCurrentTrack(track);
+      setCurrentTime(0);
+      setDuration(0);
+      
+      console.log("🔄 INICIANDO DESCARGA:", track.title);
+      
       if (fromPlaylist) {
         setPlaylist(fromPlaylist);
         setCurrentTrackIndex(trackIndex || 0);
       }
       
-      // Reproducir la canción (esto manejará la descarga si es necesaria)
-      await musicService.play(track);
+      // Mantener isDownloading=true durante TODO el proceso
+      setIsDownloading(true);
+      setSavedPosition(0);
       
-      // Solo actualizar el estado después de que la canción esté lista
-      setCurrentTrack(track);
-      setCurrentTime(0); // Reset to 0 for new track selections
-      setDuration(musicService.getDuration());
-      setIsPlaying(true);
+      const downloadTimeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Download timeout')), 60000);
+      });
+
+      // Paso 1: Esperar descarga COMPLETA
+      console.log("⏳ Esperando descarga completa...");
+      const downloadStart = Date.now();
       
-      console.log("Canción cargada y reproduciendo:", track.title);
+      const songPath = await Promise.race([
+        window.musicAPI.getSongPath(track.id, track.title),
+        downloadTimeout
+      ]);
+      
+      const downloadTime = Date.now() - downloadStart;
+
+      if (!songPath) {
+        throw new Error("No se pudo descargar la canción");
+      }
+
+      console.log(`✅ DESCARGA COMPLETADA en ${downloadTime}ms`);
+      
+      // Paso 2: Cargar y reproducir audio
+      console.log("🎵 Cargando audio...");
+      setIsLoadingAudio(true);
+      
+      const audioStart = Date.now();
+      await musicService.loadAudioOnly(track);
+      const audioTime = Date.now() - audioStart;
+      
+      console.log(`🔊 AUDIO LISTO en ${audioTime}ms`);
+      
+      // Verificar estado DESPUÉS de que todo esté listo
+      if (pendingTrackId === track.id) {
+        setDuration(musicService.getDuration());
+        
+        // CLAVE: Usar un pequeño delay para asegurar sincronización
+        setTimeout(() => {
+          const finalPlayingState = musicService.isPlaying();
+          setIsPlaying(finalPlayingState);
+          console.log(`🎶 ESTADO FINAL: Playing=${finalPlayingState}, Duration=${musicService.getDuration()}s`);
+        }, 100);
+      }
+      
     } catch (error) {
-      console.error('Error al seleccionar pista:', error);
+      console.error('❌ ERROR:', error);
       setIsPlaying(false);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      if (errorMessage.includes('timeout')) {
+        console.error('⏱️ La descarga tomó más de 60 segundos. Inténtalo de nuevo.');
+      } else {
+        console.error('🚨 Error:', errorMessage);
+      }
+      
     } finally {
+      console.log("🏁 PROCESO COMPLETADO");
       setIsDownloading(false);
+      setIsLoadingAudio(false);
+      setPendingTrackId(null);
     }
   };
 
@@ -326,7 +401,22 @@ export function App() {
   };
 
   const handleSkipForward = () => {
-    if (playlist.length === 0 || isDownloading) return;
+    const now = Date.now();
+    
+    // Debouncing más estricto para skip
+    if (now - lastActionTime < 800) {
+      console.log("Skip demasiado rápido, ignorando...");
+      return;
+    }
+    
+    // Skip buttons work even during download, just not during pending track selection
+    if (playlist.length === 0 || pendingTrackId) {
+      console.log("No se puede hacer skip:", { 
+        playlistEmpty: playlist.length === 0, 
+        pending: !!pendingTrackId 
+      });
+      return;
+    }
     
     let nextIndex;
     if (isShuffle) {
@@ -344,7 +434,16 @@ export function App() {
   };
 
   const handleSkipBack = () => {
-    if (isDownloading) return;
+    const now = Date.now();
+    
+    // Debouncing
+    if (now - lastActionTime < 800) {
+      console.log("Skip back demasiado rápido, ignorando...");
+      return;
+    }
+    
+    // Skip buttons work even during download, just not during pending track selection
+    if (pendingTrackId) return;
 
     // Si llevamos más de 3 segundos, reiniciar la canción actual
     if (currentTime > 3) {
@@ -429,6 +528,7 @@ export function App() {
               onSkipForward={handleSkipForward}
               onSkipBack={handleSkipBack}
               isDownloading={isDownloading}
+              isLoadingAudio={isLoadingAudio}
             />
             
             {/* Mostrar indicador de precarga solo cuando no está descargando la actual */}

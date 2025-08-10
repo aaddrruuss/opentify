@@ -190,7 +190,260 @@ function saveSettings(settings: typeof defaultSettings) {
   }
 }
 
+// Queue para manejar descargas concurrentes y evitar conflictos
+interface DownloadRequest {
+  videoId: string;
+  title?: string;
+  preload: boolean;
+  resolve: (path: string | null) => void;
+  reject: (error: Error) => void;
+}
+
+class DownloadManager {
+  private activeDownloads = new Map<string, Promise<string | null>>();
+  private downloadQueue: DownloadRequest[] = [];
+  private maxConcurrentDownloads = 2;
+  private activeCount = 0;
+
+  async queueDownload(videoId: string, title?: string, preload: boolean = false): Promise<string | null> {
+    // Si ya hay una descarga activa para este video, esperar a que termine
+    if (this.activeDownloads.has(videoId)) {
+      console.log(`Download already in progress for ${videoId}, waiting...`);
+      return this.activeDownloads.get(videoId)!;
+    }
+
+    // Crear promesa para esta descarga
+    const downloadPromise = new Promise<string | null>((resolve, reject) => {
+      const request: DownloadRequest = { videoId, title, preload, resolve, reject };
+      
+      if (this.activeCount < this.maxConcurrentDownloads) {
+        this.processDownload(request);
+      } else {
+        this.downloadQueue.push(request);
+        if (!preload) {
+          console.log(`Download queued for ${title || videoId} (queue length: ${this.downloadQueue.length})`);
+        }
+      }
+    });
+
+    this.activeDownloads.set(videoId, downloadPromise);
+    return downloadPromise;
+  }
+
+  private async processDownload(request: DownloadRequest) {
+    this.activeCount++;
+    const { videoId, title, preload, resolve, reject } = request;
+
+    try {
+      const result = await this.performDownload(videoId, title, preload);
+      resolve(result);
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    } finally {
+      this.activeCount--;
+      this.activeDownloads.delete(videoId);
+      
+      // Procesar siguiente en la queue
+      if (this.downloadQueue.length > 0) {
+        const nextRequest = this.downloadQueue.shift()!;
+        this.processDownload(nextRequest);
+      }
+    }
+  }
+
+  private async performDownload(videoId: string, title?: string, preload: boolean = false): Promise<string | null> {
+    try {
+      // Verificar cache primero
+      const cachedPath = isSongCached(videoId);
+      if (cachedPath) {
+        if (!preload) {
+          console.log("📂 Cache hit:", path.basename(cachedPath));
+        }
+        return cachedPath;
+      }
+
+      if (!preload) {
+        console.log("🔄 INICIANDO DESCARGA:", title || videoId);
+      }
+
+      await ytdlpReadyPromise;
+
+      if (!ytDlpWrapInstance) {
+        throw new Error("YtDlpWrap no está inicializado");
+      }
+
+      const timestamp = Date.now();
+      const finalSongPath = getSongFilePath(videoId, title);
+      const tempPath = path.join(songsDir, `${videoId}_${timestamp}_temp.%(ext)s`);
+
+      const args = [
+        `https://www.youtube.com/watch?v=${videoId}`,
+        "-f", "bestaudio[ext=m4a]/bestaudio/best",
+        "-o", tempPath,
+        "--extract-audio",
+        "--audio-format", "mp3",
+        "--audio-quality", preload ? "7" : "5",
+        "--no-playlist",
+        "--no-warnings",
+        "--concurrent-fragments", "2",
+        "--retries", "3",
+        "--fragment-retries", "3",
+        "--no-continue",
+        "--no-part"
+      ];
+
+      if (process.platform === "win32") {
+        args.push("--no-check-certificates");
+      }
+
+      const startTime = Date.now();
+      
+      if (!preload) {
+        console.log("🚀 Ejecutando yt-dlp...");
+      }
+      
+      // ESPERAR que el proceso termine COMPLETAMENTE
+      await ytDlpWrapInstance.exec(args);
+      
+      const downloadTime = Date.now() - startTime;
+      
+      if (!preload) {
+        console.log(`⏳ Proceso yt-dlp terminado en ${downloadTime}ms`);
+      }
+
+      // Buscar archivo descargado
+      const tempMp3Path = path.join(songsDir, `${videoId}_${timestamp}_temp.mp3`);
+      
+      // Esperar un momento adicional para asegurar escritura completa
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      if (fs.existsSync(tempMp3Path)) {
+        const stats = fs.statSync(tempMp3Path);
+        const fileSizeKB = stats.size / 1024;
+        
+        if (!preload) {
+          console.log(`📁 Archivo: ${fileSizeKB.toFixed(2)}KB`);
+        }
+        
+        // Validar tamaño mínimo
+        if (stats.size < 100 * 1024) {
+          console.warn(`⚠️ Archivo pequeño (${fileSizeKB}KB), esperando más...`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          if (fs.existsSync(tempMp3Path)) {
+            const newStats = fs.statSync(tempMp3Path);
+            if (!preload) {
+              console.log(`📁 Tamaño final: ${(newStats.size / 1024).toFixed(2)}KB`);
+            }
+          }
+        }
+        
+        // Verificar archivo final existente
+        if (fs.existsSync(finalSongPath)) {
+          try {
+            fs.unlinkSync(tempMp3Path);
+          } catch (err) {
+            // Ignorar error
+          }
+          if (!preload) {
+            console.log("📂 Usando existente:", path.basename(finalSongPath));
+          }
+          return finalSongPath;
+        }
+
+        // Mover archivo temporal al final
+        try {
+          fs.renameSync(tempMp3Path, finalSongPath);
+          
+          const finalStats = fs.statSync(finalSongPath);
+          if (!preload) {
+            console.log(`✅ DESCARGA COMPLETADA: ${path.basename(finalSongPath)} (${(finalStats.size / 1024).toFixed(2)}KB en ${downloadTime}ms)`);
+          }
+          
+          return finalSongPath;
+        } catch (moveError) {
+          console.error("❌ Error moviendo:", moveError);
+          throw new Error("No se pudo finalizar la descarga");
+        }
+      } else {
+        throw new Error("❌ Archivo no creado después de descarga");
+      }
+
+    } catch (error) {
+      this.cleanupTempFiles(videoId);
+      if (!preload) {
+        console.error("❌ Error descargando:", error);
+      }
+      throw error;
+    }
+  }
+
+  // Mejorar cleanup para incluir archivos con timestamp
+  private cleanupTempFiles(videoId: string) {
+    try {
+      const files = fs.readdirSync(songsDir);
+      const tempFiles = files.filter(file => 
+        file.includes(videoId) && (
+          file.includes('_temp') || 
+          file.includes('.part') ||
+          file.includes('.tmp') ||
+          file.includes('.download')
+        )
+      );
+      
+      for (const tempFile of tempFiles) {
+        const fullPath = path.join(songsDir, tempFile);
+        try {
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+            console.log("Cleaned up temp file:", tempFile);
+          }
+        } catch (cleanupError) {
+          console.warn("Could not cleanup temp file:", tempFile, cleanupError);
+        }
+      }
+    } catch (error) {
+      console.warn("Error during temp file cleanup:", error);
+    }
+  }
+
+  // Método para limpiar archivos huérfanos al iniciar
+  cleanupOrphanedFiles() {
+    try {
+      ensureSongsDirExists();
+      const files = fs.readdirSync(songsDir);
+      const tempFiles = files.filter(file => 
+        file.includes('_temp') || file.includes('.part') || file.includes('.tmp')
+      );
+      
+      for (const tempFile of tempFiles) {
+        const fullPath = path.join(songsDir, tempFile);
+        try {
+          const stats = fs.statSync(fullPath);
+          const now = Date.now();
+          const fileAge = now - stats.mtime.getTime();
+          
+          // Eliminar archivos temporales de más de 1 hora
+          if (fileAge > 3600000) {
+            fs.unlinkSync(fullPath);
+            console.log("Cleaned up old temp file:", tempFile);
+          }
+        } catch (error) {
+          // Ignore individual file errors
+        }
+      }
+    } catch (error) {
+      console.error("Error during cleanup:", error);
+    }
+  }
+}
+
+const downloadManager = new DownloadManager();
+
 export function setupIpcHandlers() {
+  // Limpiar archivos huérfanos al iniciar
+  downloadManager.cleanupOrphanedFiles();
+
   ipcMain.handle("search-music", async (event, query: string) => {
     try {
       const videos = await YouTube.search(query, {
@@ -275,101 +528,38 @@ export function setupIpcHandlers() {
     }
   });
 
-  // Modificar el handler existente para optimizar velocidad de descarga
+  // Handler mejorado para descargas con queue management
   ipcMain.handle("get-song-path", async (event, videoId: string, title?: string, preload: boolean = false) => {
     try {
-      // Primero verificar si la canción ya está en cache
+      // Verificar cache primero
       const cachedPath = isSongCached(videoId);
       if (cachedPath) {
-        if (!preload) {
-          console.log("Canción encontrada en cache:", cachedPath);
-        }
         return cachedPath;
       }
 
-      // Si no está en cache, descargarla
+      // Usar el download manager para evitar conflictos
+      return await downloadManager.queueDownload(videoId, title, preload);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
       if (!preload) {
-        console.log("Canción no encontrada en cache, descargando:", videoId);
-      } else {
-        console.log("Precargando canción:", title || videoId);
-      }
-
-      // Esperar a que yt-dlp esté listo antes de continuar
-      await ytdlpReadyPromise;
-
-      if (!ytDlpWrapInstance) {
-        throw new Error("YtDlpWrap no está inicializado");
-      }
-
-      // Crear la ruta de destino en el directorio de canciones
-      const finalSongPath = getSongFilePath(videoId, title);
-      const tempPath = path.join(songsDir, `${videoId}_temp.%(ext)s`);
-
-      if (!preload) {
-        console.log("Descargando canción a:", finalSongPath);
-      }
-
-      // Configuración optimizada para descarga más rápida
-      const args = [
-        `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "bestaudio[ext=m4a]/bestaudio/best", // Priorizar m4a que es más rápido
-        "-o", tempPath,
-        "--extract-audio",
-        "--audio-format", "mp3",
-        "--audio-quality", "5", // Calidad más baja para velocidad (0=mejor, 9=peor)
-        "--no-playlist",
-        "--no-warnings",
-        "--concurrent-fragments", "4", // Descargas paralelas
-        "--retries", "3", // Reintentos en caso de error
-        "--fragment-retries", "3"
-      ];
-
-      // En Windows y para preload, optimizaciones adicionales
-      if (process.platform === "win32") {
-        args.push("--no-check-certificates");
+        console.error("Download error:", errorMessage);
       }
       
+      // No lanzar error para preload, solo retornar null
       if (preload) {
-        // Para precarga, usar menor calidad para velocidad
-        args[args.findIndex(arg => arg === "--audio-quality") + 1] = "7";
+        return null;
       }
-
-      const startTime = Date.now();
-      await ytDlpWrapInstance.exec(args);
-      const downloadTime = Date.now() - startTime;
-
-      // Renombrar el archivo temporal al nombre final
-      const tempMp3Path = path.join(songsDir, `${videoId}_temp.mp3`);
-      if (fs.existsSync(tempMp3Path)) {
-        fs.renameSync(tempMp3Path, finalSongPath);
-        if (!preload) {
-          console.log(`Canción descargada en ${downloadTime}ms:`, finalSongPath);
-        } else {
-          console.log(`Canción precargada en ${downloadTime}ms:`, title || videoId);
-        }
-        
-        // Mostrar estadísticas del cache solo para descargas principales
-        if (!preload) {
-          try {
-            const files = fs.readdirSync(songsDir);
-            const mp3Files = files.filter(f => f.endsWith('.mp3'));
-            console.log(`Cache de canciones: ${mp3Files.length} archivos`);
-          } catch (error) {
-            console.error("Error reading cache stats:", error);
-          }
-        }
-        
-        return finalSongPath;
-      } else {
-        throw new Error("El archivo no se creó correctamente");
+      
+      // Para descargas principales, intentar una vez más después de un breve delay
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return await downloadManager.queueDownload(videoId, title, preload);
+      } catch (retryError) {
+        console.error("Retry failed:", retryError);
+        return null;
       }
-    } catch (error) {
-      if (!preload) {
-        console.error("Download error:", error);
-      } else {
-        console.error("Preload error:", error);
-      }
-      return null;
     }
   });
 
