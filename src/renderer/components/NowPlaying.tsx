@@ -1,5 +1,5 @@
 import React from 'react';
-import { Track } from '../types';
+import { Track } from '../types/index';
 
 interface NowPlayingProps {
   track: Track;

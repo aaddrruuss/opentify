@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { TrackList } from "./TrackList";
-import { Track } from "../types";
+import { Track } from "../types/index";
 import { SearchIcon } from "lucide-react";
 
 interface MusicLibraryProps {

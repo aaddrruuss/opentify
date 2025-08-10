@@ -1,4 +1,4 @@
-import { Track } from "../types";
+import { Track } from "../types/index";
 
 class MusicService {
   private audio: HTMLAudioElement | null = null;
@@ -414,12 +414,38 @@ class MusicService {
         this.audio.load();
       });
       
+      // Reproducir automáticamente
+      await this.audio.play();
+      console.log("MusicService: Reproduciendo exitosamente");
+      
     } catch (error) {
-      console.error("MusicService: Error in loadAudioOnly:", error);
+      console.error("MusicService: Error en loadAudioOnly:", error);
       this.cleanup();
       throw error;
     } finally {
       this.isLoadingTrack = false;
+    }
+  }
+
+  // Añadir método específico para repetir canción
+  async repeatCurrentTrack(): Promise<void> {
+    if (!this.audio || !this.currentTrack) {
+      console.warn("No hay audio o track para repetir");
+      return;
+    }
+
+    try {
+      // Resetear el audio al inicio
+      this.audio.currentTime = 0;
+      
+      // Intentar reproducir directamente
+      await this.audio.play();
+      console.log("MusicService: Repitiendo canción desde el inicio");
+    } catch (error) {
+      console.error("Error repitiendo canción, recargando:", error);
+      // Si falla, recargar completamente
+      const trackToRepeat = this.currentTrack;
+      await this.loadAudioOnly(trackToRepeat);
     }
   }
 }

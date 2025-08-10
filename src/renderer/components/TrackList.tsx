@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlayIcon, ClockIcon } from 'lucide-react';
-import { Track } from '../types';
+import { Track } from '../types/index';
 
 interface TrackListProps {
   tracks: Track[];

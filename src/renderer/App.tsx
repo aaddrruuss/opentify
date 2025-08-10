@@ -4,7 +4,7 @@ import { NowPlaying } from './components/NowPlaying';
 import { MusicLibrary } from './components/MusicLibrary';
 import { PlayerControls } from './components/PlayerControls';
 import { musicService } from './services/musicService';
-import { Track, Settings } from './types';
+import { Track, Settings } from './types/index';
 
 export function App() {
   const [currentView, setCurrentView] = useState('home');
@@ -208,9 +208,17 @@ export function App() {
 
   const handleSongEnded = () => {
     if (repeatMode === "one") {
-      // Repetir la misma canción
+      // Repetir la misma canción usando método especializado
       if (currentTrack) {
-        handleTrackSelect(currentTrack);
+        console.log("Repitiendo canción:", currentTrack.title);
+        musicService.repeatCurrentTrack().then(() => {
+          setIsPlaying(true);
+          setCurrentTime(0); // Reset UI time
+        }).catch(error => {
+          console.error("Error repitiendo canción:", error);
+          // Fallback: cargar de nuevo la canción
+          handleTrackSelect(currentTrack);
+        });
       }
     } else if (repeatMode === "all") {
       // Reproducir siguiente canción en la playlist
