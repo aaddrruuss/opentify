@@ -37,7 +37,14 @@ export function MusicLibrary({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim()) {
-      onSearch(inputValue.trim());
+      let searchTerm = inputValue.trim();
+      
+      // Agregar "audio" al final si no está presente en la búsqueda
+      if (!searchTerm.toLowerCase().includes('audio')) {
+        searchTerm += ' audio';
+      }
+      
+      onSearch(searchTerm);
     }
   };
 
@@ -97,23 +104,28 @@ export function MusicLibrary({
                 </button>
               </form>
               <p className="text-sm text-gray-500 mt-2">
-                💡 Las canciones se guardan automáticamente en cache para reproducción rápida.
-                Solo se descargan una vez.
+                💡 Se añade "audio" automáticamente a tu búsqueda y se filtran videos de más de 15 minutos.
+                Las canciones se guardan en cache para reproducción rápida.
               </p>
             </div>
 
             {isLoading && (
               <div className="flex justify-center items-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2196F3]"></div>
-                <p className="ml-4 text-gray-600">Buscando...</p>
+                <p className="ml-4 text-gray-600">Buscando canciones...</p>
               </div>
             )}
 
             {!isLoading && searchResults.length > 0 && (
               <>
-                <h2 className="text-2xl font-bold mb-4">
-                  Resultados para "{searchQuery}"
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-bold">
+                    Resultados para "{searchQuery}"
+                  </h2>
+                  <span className="text-sm text-gray-500">
+                    {searchResults.length} canciones encontradas (&lt; 15 min)
+                  </span>
+                </div>
                 <TrackList
                   tracks={searchResults}
                   onTrackSelect={onTrackSelect}
@@ -123,8 +135,11 @@ export function MusicLibrary({
 
             {!isLoading && searchQuery && searchResults.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-500">
-                  No se encontraron resultados para "{searchQuery}"
+                <p className="text-gray-500 mb-2">
+                  No se encontraron canciones para "{searchQuery}"
+                </p>
+                <p className="text-sm text-gray-400">
+                  Intenta con términos más específicos. Solo se muestran videos de menos de 15 minutos.
                 </p>
               </div>
             )}
@@ -132,8 +147,11 @@ export function MusicLibrary({
             {!isLoading && !searchQuery && (
               <div className="text-center py-12">
                 <SearchIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">
+                <p className="text-gray-500 mb-2">
                   Busca tu música favorita en YouTube
+                </p>
+                <p className="text-sm text-gray-400">
+                  Solo se mostrarán canciones de menos de 15 minutos de duración
                 </p>
               </div>
             )}

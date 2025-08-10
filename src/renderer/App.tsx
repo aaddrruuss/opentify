@@ -71,10 +71,15 @@ export function App() {
     if (!query.trim()) return;
 
     setIsLoading(true);
-    setSearchQuery(query);
+    
+    // Limpiar la query para mostrar (quitar "audio" automático para la visualización)
+    const displayQuery = query.replace(/ audio$/, '').trim();
+    setSearchQuery(displayQuery);
     
     try {
+      console.log("Buscando con query:", query); // Debug: mostrar query real
       const results = await window.musicAPI.searchMusic(query);
+      console.log("Resultados obtenidos:", results.length); // Debug: mostrar cantidad de resultados
       setSearchResults(results);
     } catch (error) {
       console.error('Error en búsqueda:', error);

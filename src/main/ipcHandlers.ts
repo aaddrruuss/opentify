@@ -126,11 +126,36 @@ export function setupIpcHandlers() {
   ipcMain.handle("search-music", async (event, query: string) => {
     try {
       const videos = await YouTube.search(query, {
-        limit: 20,
+        limit: 50, // Buscar más resultados para poder filtrar
         type: "video",
       });
 
-      return videos.map((video) => {
+      // Filtrar videos por duración (menos de 15 minutos = 900 segundos)
+      const filteredVideos = videos.filter((video) => {
+        const durationInMilliseconds = video.duration;
+        
+        // Si no hay duración disponible, incluir el video
+        if (!durationInMilliseconds || durationInMilliseconds === 0) {
+          console.log(`Video sin duración específica incluido: "${video.title}"`);
+          return true;
+        }
+        
+        // Convertir millisegundos a segundos
+        const durationInSeconds = Math.floor(durationInMilliseconds / 1000);
+        
+        // Filtrar videos que duren más de 15 minutos (900 segundos)
+        if (durationInSeconds > 900) {
+          console.log(`Video filtrado por duración: "${video.title}" - ${video.durationFormatted} (${durationInSeconds}s)`);
+          return false;
+        }
+        
+        console.log(`Video incluido: "${video.title}" - ${video.durationFormatted} (${durationInSeconds}s)`);
+        return true;
+      }).slice(0, 20); // Limitar a 20 resultados después del filtrado
+
+      console.log(`Búsqueda: "${query}" - ${videos.length} resultados encontrados, ${filteredVideos.length} después del filtrado por duración`);
+
+      return filteredVideos.map((video) => {
         // Construir URLs de thumbnail más confiables
         const videoId = video.id!;
         const thumbnailOptions = [
@@ -144,7 +169,7 @@ export function setupIpcHandlers() {
           id: videoId,
           title: video.title!,
           artist: video.channel?.name || "Unknown Artist",
-          duration: video.durationFormatted,
+          duration: video.durationFormatted || "0:00",
           thumbnail: thumbnailOptions[1], // Usar hqdefault como predeterminado
           cover: thumbnailOptions[1] // También asignar a cover para compatibilidad
         };
