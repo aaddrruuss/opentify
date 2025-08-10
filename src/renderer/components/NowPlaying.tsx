@@ -4,9 +4,10 @@ import { Track } from '../types';
 interface NowPlayingProps {
   track: Track;
   isPlaying: boolean;
+  isDownloading?: boolean;
 }
 
-export function NowPlaying({ track, isPlaying }: NowPlayingProps) {
+export function NowPlaying({ track, isPlaying, isDownloading = false }: NowPlayingProps) {
   const getImageUrl = () => {
     console.log("NowPlaying track data:", track); // Debug log
     
@@ -57,7 +58,7 @@ export function NowPlaying({ track, isPlaying }: NowPlayingProps) {
 
   return (
     <div className="flex items-center p-4">
-      <div className="w-14 h-14 mr-4 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden border dark:border-gray-600">
+      <div className="w-14 h-14 mr-4 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden border dark:border-gray-600 relative">
         <img
           src={getImageUrl()}
           alt={`${track.title} cover`}
@@ -66,9 +67,21 @@ export function NowPlaying({ track, isPlaying }: NowPlayingProps) {
           onLoad={handleImageLoad}
           crossOrigin="anonymous"
         />
+        {isDownloading && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+          </div>
+        )}
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">{track.title}</h3>
+        <h3 className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
+          {track.title}
+          {isDownloading && (
+            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+              (Descargando...)
+            </span>
+          )}
+        </h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{track.artist}</p>
       </div>
       <button className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#2196F3] dark:hover:text-[#2196F3] flex-shrink-0 transition-colors">

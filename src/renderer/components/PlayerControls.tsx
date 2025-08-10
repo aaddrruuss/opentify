@@ -26,6 +26,7 @@ interface PlayerControlsProps {
   onShuffleToggle: (shuffle: boolean) => void;
   onSkipForward: () => void;
   onSkipBack: () => void;
+  isDownloading?: boolean;
 }
 
 export function PlayerControls({
@@ -44,6 +45,7 @@ export function PlayerControls({
   onShuffleToggle,
   onSkipForward,
   onSkipBack,
+  isDownloading = false,
 }: PlayerControlsProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isVolumeDragging, setIsVolumeDragging] = useState(false);
@@ -195,32 +197,41 @@ export function PlayerControls({
   const displayVolume = isMuted ? 0 : volume;
 
   return (
-    <div className="px-6 py-4">
+    <div className="px-6 py-4 flex-shrink-0">
       <div className="flex items-center justify-center mb-2">
         <button
           className={`mx-2 transition-colors ${
             isShuffle ? "text-[#2196F3]" : "text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3]"
-          }`}
+          } ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
           onClick={toggleShuffle}
+          disabled={isDownloading}
           title="Shuffle"
         >
           <ShuffleIcon className="h-4 w-4" />
         </button>
 
         <button
-          className="mx-2 text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3] transition-colors"
+          className={`mx-2 text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3] transition-colors ${
+            isDownloading ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           onClick={onSkipBack}
+          disabled={isDownloading}
           title="Previous"
         >
           <SkipBackIcon className="h-5 w-5" />
         </button>
 
         <button
-          className="mx-3 p-2 rounded-full bg-[#2196F3] text-white hover:bg-blue-600 transition-colors"
+          className={`mx-3 p-2 rounded-full bg-[#2196F3] text-white hover:bg-blue-600 transition-colors ${
+            isDownloading ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           onClick={onPlayPause}
+          disabled={isDownloading}
           title={isPlaying ? "Pause" : "Play"}
         >
-          {isPlaying ? (
+          {isDownloading ? (
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
+          ) : isPlaying ? (
             <PauseIcon className="h-6 w-6" />
           ) : (
             <PlayIcon className="h-6 w-6 ml-0.5" />
@@ -228,8 +239,11 @@ export function PlayerControls({
         </button>
 
         <button
-          className="mx-2 text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3] transition-colors"
+          className={`mx-2 text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3] transition-colors ${
+            isDownloading ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
           onClick={onSkipForward}
+          disabled={isDownloading}
           title="Next"
         >
           <SkipForwardIcon className="h-5 w-5" />
@@ -240,8 +254,9 @@ export function PlayerControls({
             repeatMode !== "off"
               ? "text-[#2196F3]"
               : "text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3]"
-          }`}
+          } ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
           onClick={toggleRepeat}
+          disabled={isDownloading}
           title={`Repeat: ${repeatMode}`}
         >
           <div className="relative">
@@ -262,24 +277,28 @@ export function PlayerControls({
 
         <div
           ref={progressRef}
-          className="flex-1 mx-3 h-3 bg-gray-200 dark:bg-gray-700 rounded relative cursor-pointer group py-1"
-          onClick={handleProgressClick}
-          onMouseDown={handleProgressMouseDown}
+          className={`flex-1 mx-3 h-3 bg-gray-200 dark:bg-gray-700 rounded relative group py-1 ${
+            isDownloading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+          }`}
+          onClick={!isDownloading ? handleProgressClick : undefined}
+          onMouseDown={!isDownloading ? handleProgressMouseDown : undefined}
         >
           <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 rounded transform -translate-y-1/2">
             <div
               className="absolute h-full bg-[#2196F3] rounded pointer-events-none"
               style={{ width: `${progressPercentage}%` }}
             />
-            <div
-              className={`absolute h-3 w-3 bg-[#2196F3] rounded-full shadow top-1/2 transform -translate-y-1/2 pointer-events-none transition-opacity ${
-                isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              style={{
-                left: `${progressPercentage}%`,
-                transform: "translateX(-50%) translateY(-50%)",
-              }}
-            />
+            {!isDownloading && (
+              <div
+                className={`absolute h-3 w-3 bg-[#2196F3] rounded-full shadow top-1/2 transform -translate-y-1/2 pointer-events-none transition-opacity ${
+                  isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                }`}
+                style={{
+                  left: `${progressPercentage}%`,
+                  transform: "translateX(-50%) translateY(-50%)",
+                }}
+              />
+            )}
           </div>
         </div>
 

@@ -275,7 +275,7 @@ export function setupIpcHandlers() {
     }
   });
 
-  // Modificar el handler existente para soportar precarga silenciosa
+  // Modificar el handler existente para optimizar velocidad de descarga
   ipcMain.handle("get-song-path", async (event, videoId: string, title?: string, preload: boolean = false) => {
     try {
       // Primero verificar si la canción ya está en cache
@@ -309,44 +309,54 @@ export function setupIpcHandlers() {
         console.log("Descargando canción a:", finalSongPath);
       }
 
-      // Configuración para descargar directamente al directorio de cache
+      // Configuración optimizada para descarga más rápida
       const args = [
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "bestaudio/best",
+        "-f", "bestaudio[ext=m4a]/bestaudio/best", // Priorizar m4a que es más rápido
         "-o", tempPath,
         "--extract-audio",
         "--audio-format", "mp3",
-        "--audio-quality", "0", // Mejor calidad
+        "--audio-quality", "5", // Calidad más baja para velocidad (0=mejor, 9=peor)
         "--no-playlist",
-        "--no-warnings"
+        "--no-warnings",
+        "--concurrent-fragments", "4", // Descargas paralelas
+        "--retries", "3", // Reintentos en caso de error
+        "--fragment-retries", "3"
       ];
 
-      // En Windows, agregar opciones adicionales para evitar problemas
+      // En Windows y para preload, optimizaciones adicionales
       if (process.platform === "win32") {
         args.push("--no-check-certificates");
       }
+      
+      if (preload) {
+        // Para precarga, usar menor calidad para velocidad
+        args[args.findIndex(arg => arg === "--audio-quality") + 1] = "7";
+      }
 
+      const startTime = Date.now();
       await ytDlpWrapInstance.exec(args);
+      const downloadTime = Date.now() - startTime;
 
       // Renombrar el archivo temporal al nombre final
       const tempMp3Path = path.join(songsDir, `${videoId}_temp.mp3`);
       if (fs.existsSync(tempMp3Path)) {
         fs.renameSync(tempMp3Path, finalSongPath);
         if (!preload) {
-          console.log("Canción descargada y guardada en cache:", finalSongPath);
+          console.log(`Canción descargada en ${downloadTime}ms:`, finalSongPath);
         } else {
-          console.log("Canción precargada exitosamente:", title || videoId);
+          console.log(`Canción precargada en ${downloadTime}ms:`, title || videoId);
         }
         
-        // Mostrar estadísticas del cache
-        try {
-          const files = fs.readdirSync(songsDir);
-          const mp3Files = files.filter(f => f.endsWith('.mp3'));
-          if (!preload) {
+        // Mostrar estadísticas del cache solo para descargas principales
+        if (!preload) {
+          try {
+            const files = fs.readdirSync(songsDir);
+            const mp3Files = files.filter(f => f.endsWith('.mp3'));
             console.log(`Cache de canciones: ${mp3Files.length} archivos`);
+          } catch (error) {
+            console.error("Error reading cache stats:", error);
           }
-        } catch (error) {
-          console.error("Error reading cache stats:", error);
         }
         
         return finalSongPath;

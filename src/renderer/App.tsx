@@ -27,6 +27,7 @@ export function App() {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isRestoringTrack, setIsRestoringTrack] = useState(false);
   const [isPreloadingNext, setIsPreloadingNext] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false); // Track if current song is downloading
 
   // Cargar configuraciones al inicio
   useEffect(() => {
@@ -108,7 +109,7 @@ export function App() {
       
       // Precargar la siguiente canción cuando llevemos 30% de la canción actual
       const progressPercentage = musicService.getDuration() > 0 ? (time / musicService.getDuration()) * 100 : 0;
-      if (progressPercentage > 30 && !isPreloadingNext && playlist.length > 0) {
+      if (progressPercentage > 30 && !isPreloadingNext && playlist.length > 0 && !isDownloading) {
         preloadNextTrack();
       }
     });
@@ -126,44 +127,48 @@ export function App() {
       if (isRestoringTrack && currentTrack) {
         const restoreTrack = async () => {
           try {
+            setIsDownloading(true);
             await musicService.play(currentTrack);
             musicService.pause(); // Pausar inmediatamente
             musicService.seek(currentTime); // Ir a la posición guardada
             setIsRestoringTrack(false);
+            setIsDownloading(false);
             console.log("Canción restaurada exitosamente");
           } catch (error) {
             console.error("Error restaurando canción:", error);
             setIsRestoringTrack(false);
+            setIsDownloading(false);
           }
         };
         restoreTrack();
       }
     }
-  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, currentTime, isPreloadingNext, playlist.length]);
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, currentTime, isPreloadingNext, playlist.length, isDownloading]);
 
   // Función para precargar la siguiente canción
   const preloadNextTrack = async () => {
-    if (isPreloadingNext || playlist.length === 0) return;
+    if (isPreloadingNext || playlist.length === 0 || isDownloading) return;
     
     setIsPreloadingNext(true);
     
     try {
       let nextIndex;
       if (isShuffle) {
-        // En modo aleatorio, seleccionar una canción aleatoria diferente a la actual
         const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
-        if (availableIndexes.length === 0) return;
+        if (availableIndexes.length === 0) {
+          setIsPreloadingNext(false);
+          return;
+        }
         nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
       } else {
-        // Modo normal: siguiente canción en la lista
         nextIndex = (currentTrackIndex + 1) % playlist.length;
       }
       
       const nextTrack = playlist[nextIndex];
       if (nextTrack) {
         console.log("Precargando siguiente canción:", nextTrack.title);
-        // Precargar la canción en segundo plano
-        await window.musicAPI.getSongPath(nextTrack.id, nextTrack.title);
+        // Usar el flag preload=true para descarga silenciosa
+        await window.musicAPI.getSongPath(nextTrack.id, nextTrack.title, true);
         console.log("Canción precargada exitosamente:", nextTrack.title);
       }
     } catch (error) {
@@ -209,11 +214,18 @@ export function App() {
   };
 
   const handleTrackSelect = async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
+    // Prevenir cambios múltiples mientras se descarga
+    if (isDownloading) {
+      console.log("Descarga en progreso, ignorando selección de track");
+      return;
+    }
+
     try {
-      setCurrentTrack(track);
-      setCurrentTime(0);
-      setDuration(0);
+      setIsDownloading(true);
       setIsPreloadingNext(false); // Reset preload flag
+      
+      // Solo actualizar la UI después de que la canción esté lista para reproducir
+      console.log("Iniciando descarga/carga de:", track.title);
       
       // Actualizar playlist si se proporciona
       if (fromPlaylist) {
@@ -221,11 +233,21 @@ export function App() {
         setCurrentTrackIndex(trackIndex || 0);
       }
       
+      // Reproducir la canción (esto manejará la descarga si es necesaria)
       await musicService.play(track);
+      
+      // Solo actualizar el estado después de que la canción esté lista
+      setCurrentTrack(track);
+      setCurrentTime(0);
+      setDuration(musicService.getDuration());
       setIsPlaying(true);
+      
+      console.log("Canción cargada y reproduciendo:", track.title);
     } catch (error) {
       console.error('Error al seleccionar pista:', error);
       setIsPlaying(false);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -269,16 +291,14 @@ export function App() {
   };
 
   const handleSkipForward = () => {
-    if (playlist.length === 0) return;
+    if (playlist.length === 0 || isDownloading) return;
     
     let nextIndex;
     if (isShuffle) {
-      // Modo aleatorio: seleccionar índice aleatorio diferente al actual
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
       if (availableIndexes.length === 0) return;
       nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
-      // Modo normal: siguiente canción
       nextIndex = (currentTrackIndex + 1) % playlist.length;
     }
     
@@ -289,6 +309,8 @@ export function App() {
   };
 
   const handleSkipBack = () => {
+    if (isDownloading) return;
+
     // Si llevamos más de 3 segundos, reiniciar la canción actual
     if (currentTime > 3) {
       handleSeek(0);
@@ -299,12 +321,10 @@ export function App() {
     
     let prevIndex;
     if (isShuffle) {
-      // Modo aleatorio: seleccionar índice aleatorio diferente al actual
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
       if (availableIndexes.length === 0) return;
       prevIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
-      // Modo normal: canción anterior
       prevIndex = currentTrackIndex === 0 ? playlist.length - 1 : currentTrackIndex - 1;
     }
     
@@ -355,6 +375,7 @@ export function App() {
             <NowPlaying
               track={currentTrack}
               isPlaying={isPlaying}
+              isDownloading={isDownloading}
             />
             <PlayerControls
               isPlaying={isPlaying}
@@ -372,9 +393,12 @@ export function App() {
               onShuffleToggle={handleShuffleToggle}
               onSkipForward={handleSkipForward}
               onSkipBack={handleSkipBack}
+              isDownloading={isDownloading}
             />
-            {isPreloadingNext && (
-              <div className="px-6 pb-2">
+            
+            {/* Mostrar indicador de precarga solo cuando no está descargando la actual */}
+            {isPreloadingNext && !isDownloading && (
+              <div className="px-6 pb-2 flex-shrink-0">
                 <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
                   <div className="animate-spin rounded-full h-3 w-3 border-b border-[#2196F3] mr-2"></div>
                   Precargando siguiente canción...
