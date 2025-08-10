@@ -5,12 +5,16 @@ class MusicService {
   private currentTrack: Track | null = null;
   private timeUpdateCallback: ((time: number) => void) | null = null;
   private endedCallback: (() => void) | null = null;
+  private isLoadingTrack: boolean = false;
 
   async play(track: Track): Promise<void> {
     try {
-      // Si es la misma canción, no recrear el audio element
-      if (this.currentTrack && this.currentTrack.id === track.id && this.audio) {
+      this.isLoadingTrack = true;
+      
+      // Si es la misma canción y ya está cargada, solo reproducir
+      if (this.currentTrack && this.currentTrack.id === track.id && this.audio && !this.audio.paused) {
         await this.audio.play();
+        this.isLoadingTrack = false;
         return;
       }
 
@@ -55,19 +59,26 @@ class MusicService {
           if (this.audio) {
             this.audio.removeEventListener("canplay", onCanPlay);
             this.audio.removeEventListener("error", onError);
+            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
             resolve();
           }
+        };
+
+        const onLoadedMetadata = () => {
+          // Los metadatos están cargados, continuar con canplay
         };
 
         const onError = (error: Event) => {
           if (this.audio) {
             this.audio.removeEventListener("canplay", onCanPlay);
             this.audio.removeEventListener("error", onError);
+            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
           }
           reject(new Error("Failed to load audio"));
         };
 
         this.audio.addEventListener("canplay", onCanPlay);
+        this.audio.addEventListener("loadedmetadata", onLoadedMetadata);
         this.audio.addEventListener("error", onError);
 
         // Cargar el audio
@@ -79,6 +90,8 @@ class MusicService {
     } catch (error) {
       console.error("Error al reproducir:", error);
       throw error;
+    } finally {
+      this.isLoadingTrack = false;
     }
   }
 
@@ -89,7 +102,7 @@ class MusicService {
   }
 
   resume(): void {
-    if (this.audio && this.audio.paused) {
+    if (this.audio && this.audio.paused && !this.isLoadingTrack) {
       this.audio.play().catch(error => {
         console.error("Error al reanudar:", error);
       });
@@ -138,8 +151,21 @@ class MusicService {
   }
 
   seek(time: number): void {
-    if (this.audio && !isNaN(this.audio.duration)) {
-      this.audio.currentTime = Math.max(0, Math.min(time, this.audio.duration));
+    if (this.audio && !isNaN(this.audio.duration) && this.audio.duration > 0) {
+      const seekTime = Math.max(0, Math.min(time, this.audio.duration));
+      this.audio.currentTime = seekTime;
+      console.log(`Seeking to: ${seekTime}s (duration: ${this.audio.duration}s)`);
+      
+      // Force a time update to ensure UI is synchronized
+      if (this.timeUpdateCallback) {
+        this.timeUpdateCallback(seekTime);
+      }
+    } else {
+      console.warn("Cannot seek: audio not ready or invalid duration", {
+        hasAudio: !!this.audio,
+        duration: this.audio?.duration,
+        readyState: this.audio?.readyState
+      });
     }
   }
 
@@ -188,6 +214,87 @@ class MusicService {
       console.error("Error precargando canción:", error);
       return false;
     }
+  }
+
+  async loadTrackForRestore(track: Track): Promise<void> {
+    try {
+      this.isLoadingTrack = true;
+      
+      // Obtener la ruta local del archivo (desde cache o descarga)
+      const songPath = await window.musicAPI.getSongPath(track.id, track.title);
+
+      if (!songPath) {
+        throw new Error("No se pudo obtener la ruta de la canción");
+      }
+
+      console.log("Cargando para restauración desde:", songPath);
+
+      // Limpiar audio anterior si existe
+      if (this.audio) {
+        this.audio.pause();
+        this.audio.removeEventListener("timeupdate", this.handleTimeUpdate);
+        this.audio.removeEventListener("ended", this.handleEnded);
+        this.audio.removeEventListener("loadedmetadata", this.handleLoadedMetadata);
+        this.audio.src = "";
+      }
+
+      // Crear nuevo elemento de audio
+      this.audio = new Audio(songPath.replace(/\\/g, '/'));
+      this.currentTrack = track;
+
+      // Configurar event listeners
+      this.audio.addEventListener("timeupdate", this.handleTimeUpdate);
+      this.audio.addEventListener("ended", this.handleEnded);
+      this.audio.addEventListener("loadedmetadata", this.handleLoadedMetadata);
+
+      // Configurar volumen actual
+      this.setVolume(this.getCurrentVolume());
+
+      // Esperar a que se carguen los metadatos SIN reproducir
+      await new Promise<void>((resolve, reject) => {
+        if (!this.audio) {
+          reject(new Error("Audio element not available"));
+          return;
+        }
+
+        const onLoadedMetadata = () => {
+          if (this.audio) {
+            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+            this.audio.removeEventListener("error", onError);
+            console.log("Metadatos cargados para restauración");
+            resolve();
+          }
+        };
+
+        const onError = (error: Event) => {
+          if (this.audio) {
+            this.audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+            this.audio.removeEventListener("error", onError);
+          }
+          reject(new Error("Failed to load audio for restore"));
+        };
+
+        this.audio.addEventListener("loadedmetadata", onLoadedMetadata);
+        this.audio.addEventListener("error", onError);
+
+        // Cargar el audio SIN reproducir - solo cargar metadatos
+        this.audio.load();
+      });
+
+    } catch (error) {
+      console.error("Error al cargar para restauración:", error);
+      throw error;
+    } finally {
+      this.isLoadingTrack = false;
+    }
+  }
+
+  isReady(): boolean {
+    return this.audio !== null && !this.isLoadingTrack && this.getDuration() > 0;
+  }
+
+  isLoadingCurrentTrack(): boolean {
+    return this.isLoadingTrack;
   }
 }
 

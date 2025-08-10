@@ -28,6 +28,7 @@ export function App() {
   const [isRestoringTrack, setIsRestoringTrack] = useState(false);
   const [isPreloadingNext, setIsPreloadingNext] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false); // Track if current song is downloading
+  const [savedPosition, setSavedPosition] = useState(0); // Store saved position separately
 
   // Cargar configuraciones al inicio
   useEffect(() => {
@@ -50,7 +51,7 @@ export function App() {
           if (timeSinceLastPlay < maxRestoreTime) {
             console.log("Restaurando última canción:", settings.lastPlayedTrack.title, "en posición:", settings.lastPlayedPosition);
             setCurrentTrack(settings.lastPlayedTrack);
-            setCurrentTime(settings.lastPlayedPosition);
+            setSavedPosition(settings.lastPlayedPosition); // Store separately
             setIsRestoringTrack(true);
           }
         }
@@ -123,27 +124,42 @@ export function App() {
     if (settingsLoaded) {
       musicService.setVolume(isMuted ? 0 : volume);
       
-      // Si estamos restaurando una canción, cargarla y posicionarla
+      // Si estamos restaurando una canción, cargarla y posicionarla SIN reproducir
       if (isRestoringTrack && currentTrack) {
         const restoreTrack = async () => {
           try {
             setIsDownloading(true);
-            await musicService.play(currentTrack);
-            musicService.pause(); // Pausar inmediatamente
-            musicService.seek(currentTime); // Ir a la posición guardada
-            setIsRestoringTrack(false);
-            setIsDownloading(false);
-            console.log("Canción restaurada exitosamente");
+            
+            // Usar el método específico para restauración que NO reproduce automáticamente
+            await musicService.loadTrackForRestore(currentTrack);
+            
+            // Esperar un momento para que los metadatos se carguen completamente
+            setTimeout(() => {
+              if (savedPosition > 0) {
+                musicService.seek(savedPosition); // Ir a la posición guardada
+                setCurrentTime(savedPosition); // Actualizar el tiempo mostrado
+                console.log("Canción restaurada en posición:", savedPosition, "sin reproducir");
+              }
+              
+              setDuration(musicService.getDuration());
+              setIsRestoringTrack(false);
+              setIsDownloading(false);
+              setSavedPosition(0); // Limpiar la posición guardada
+              
+              console.log("Restauración completada. La canción está lista para reproducir desde:", savedPosition);
+            }, 100);
+            
           } catch (error) {
             console.error("Error restaurando canción:", error);
             setIsRestoringTrack(false);
             setIsDownloading(false);
+            setSavedPosition(0);
           }
         };
         restoreTrack();
       }
     }
-  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, currentTime, isPreloadingNext, playlist.length, isDownloading]);
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, isPreloadingNext, playlist.length, isDownloading]);
 
   // Función para precargar la siguiente canción
   const preloadNextTrack = async () => {
@@ -192,24 +208,42 @@ export function App() {
   };
 
   const handlePlayPause = async () => {
-    if (!currentTrack) return;
+    if (!currentTrack || isDownloading) return;
 
     try {
       if (isPlaying) {
         musicService.pause();
         setIsPlaying(false);
       } else {
-        // Si hay una canción pausada, reanudar; si no, reproducir desde el inicio
-        if (musicService.getCurrentTrack()?.id === currentTrack.id && musicService.getCurrentTime() > 0) {
-          musicService.resume();
+        // Si hay una canción cargada y pausada, reanudar
+        if (musicService.getCurrentTrack()?.id === currentTrack.id) {
+          // Verificar si la canción está realmente cargada
+          const currentAudioTime = musicService.getCurrentTime();
+          const audioDuration = musicService.getDuration();
+          
+          if (audioDuration > 0) {
+            // La canción está cargada, solo reanudar
+            musicService.resume();
+            setIsPlaying(true);
+          } else {
+            // La canción no está completamente cargada, cargarla de nuevo
+            setIsDownloading(true);
+            await musicService.play(currentTrack);
+            setIsDownloading(false);
+            setIsPlaying(true);
+          }
         } else {
+          // Cargar y reproducir una nueva canción
+          setIsDownloading(true);
           await musicService.play(currentTrack);
+          setIsDownloading(false);
+          setIsPlaying(true);
         }
-        setIsPlaying(true);
       }
     } catch (error) {
       console.error('Error al reproducir/pausar:', error);
       setIsPlaying(false);
+      setIsDownloading(false);
     }
   };
 
@@ -223,6 +257,7 @@ export function App() {
     try {
       setIsDownloading(true);
       setIsPreloadingNext(false); // Reset preload flag
+      setSavedPosition(0); // Clear any saved position when manually selecting
       
       // Solo actualizar la UI después de que la canción esté lista para reproducir
       console.log("Iniciando descarga/carga de:", track.title);
@@ -238,7 +273,7 @@ export function App() {
       
       // Solo actualizar el estado después de que la canción esté lista
       setCurrentTrack(track);
-      setCurrentTime(0);
+      setCurrentTime(0); // Reset to 0 for new track selections
       setDuration(musicService.getDuration());
       setIsPlaying(true);
       
