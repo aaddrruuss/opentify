@@ -39,12 +39,14 @@ export function PlayerControls({
   const [isVolumeDragging, setIsVolumeDragging] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [lastVolume, setLastVolume] = useState(volume);
+  const [draggedTime, setDraggedTime] = useState(0); // Tiempo que se mostrará mientras se arrastra
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
 
-  // Efecto para manejar eventos globales de mouse para el volumen
+  // Efecto para manejar eventos globales de mouse
   useEffect(() => {
     const handleGlobalMouseMove = (e: MouseEvent) => {
+      // Manejar dragging del volumen
       if (isVolumeDragging && volumeRef.current) {
         const rect = volumeRef.current.getBoundingClientRect();
         const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
@@ -54,14 +56,29 @@ export function PlayerControls({
         setIsMuted(false);
         onVolumeChange(newVolume);
       }
+
+      // Manejar dragging del progreso
+      if (isDragging && progressRef.current && duration) {
+        const rect = progressRef.current.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const percentage = x / rect.width;
+        const newTime = percentage * duration;
+
+        // Solo actualizar el tiempo visual, no hacer seek hasta que se suelte
+        setDraggedTime(newTime);
+      }
     };
 
     const handleGlobalMouseUp = () => {
       if (isVolumeDragging) {
         setIsVolumeDragging(false);
       }
+      
       if (isDragging) {
+        // Cuando se suelta el mouse, hacer el seek al tiempo arrastrado
+        onSeek(draggedTime);
         setIsDragging(false);
+        setDraggedTime(0);
       }
     };
 
@@ -76,7 +93,7 @@ export function PlayerControls({
       document.removeEventListener('mouseup', handleGlobalMouseUp);
       document.body.style.userSelect = ''; // Restaurar selección de texto
     };
-  }, [isVolumeDragging, isDragging, onVolumeChange]);
+  }, [isVolumeDragging, isDragging, onVolumeChange, onSeek, draggedTime, duration]);
 
   const formatTime = (seconds: number) => {
     if (!seconds || isNaN(seconds)) return "0:00";
@@ -93,12 +110,25 @@ export function PlayerControls({
     const percentage = x / rect.width;
     const newTime = percentage * duration;
 
-    onSeek(newTime);
+    // Si no estamos arrastrando, hacer seek inmediatamente
+    if (!isDragging) {
+      onSeek(newTime);
+    }
   };
 
   const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressRef.current || !duration) return;
+
     setIsDragging(true);
-    handleProgressClick(e);
+    
+    // Calcular tiempo inicial del drag
+    const rect = progressRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    const newTime = percentage * duration;
+    
+    setDraggedTime(newTime);
+    e.preventDefault();
   };
 
   const handleVolumeClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -141,7 +171,9 @@ export function PlayerControls({
     setRepeatMode(modes[nextIndex]);
   };
 
-  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // Usar el tiempo arrastrado si estamos arrastrando, sino usar el tiempo actual
+  const displayTime = isDragging ? draggedTime : currentTime;
+  const progressPercentage = duration > 0 ? (displayTime / duration) * 100 : 0;
   const displayVolume = isMuted ? 0 : volume;
 
   return (
@@ -207,28 +239,30 @@ export function PlayerControls({
 
       <div className="flex items-center">
         <span className="text-xs text-gray-500 dark:text-gray-400 w-10 text-right">
-          {formatTime(currentTime)}
+          {formatTime(displayTime)}
         </span>
 
         <div
           ref={progressRef}
-          className="flex-1 mx-3 h-1 bg-gray-200 dark:bg-gray-700 rounded relative cursor-pointer group"
+          className="flex-1 mx-3 h-3 bg-gray-200 dark:bg-gray-700 rounded relative cursor-pointer group py-1"
           onClick={handleProgressClick}
           onMouseDown={handleProgressMouseDown}
         >
-          <div
-            className="absolute h-full bg-[#2196F3] rounded pointer-events-none"
-            style={{ width: `${progressPercentage}%` }}
-          />
-          <div
-            className={`absolute h-3 w-3 bg-[#2196F3] rounded-full shadow -mt-1 pointer-events-none transition-opacity ${
-              isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
-            style={{
-              left: `${progressPercentage}%`,
-              transform: "translateX(-50%)",
-            }}
-          />
+          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 rounded transform -translate-y-1/2">
+            <div
+              className="absolute h-full bg-[#2196F3] rounded pointer-events-none"
+              style={{ width: `${progressPercentage}%` }}
+            />
+            <div
+              className={`absolute h-3 w-3 bg-[#2196F3] rounded-full shadow top-1/2 transform -translate-y-1/2 pointer-events-none transition-opacity ${
+                isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              style={{
+                left: `${progressPercentage}%`,
+                transform: "translateX(-50%) translateY(-50%)",
+              }}
+            />
+          </div>
         </div>
 
         <span className="text-xs text-gray-500 dark:text-gray-400 w-10">
