@@ -97,9 +97,12 @@ class MusicService {
   }
 
   private currentVolume: number = 80;
+  private actualVolume: number = 80; // Volumen real sin considerar mute
 
   setVolume(volume: number): void {
     this.currentVolume = volume;
+    this.actualVolume = volume > 0 ? volume : this.actualVolume; // Preservar el volumen real
+    
     if (this.audio) {
       // Convertir el volumen lineal (0-100) a escala logarítmica para un control más natural
       let logVolume: number;
@@ -120,6 +123,10 @@ class MusicService {
 
   getCurrentVolume(): number {
     return this.currentVolume;
+  }
+
+  getActualVolume(): number {
+    return this.actualVolume;
   }
 
   getCurrentTime(): number {

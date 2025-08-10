@@ -16,6 +16,16 @@ const getSongsDirectory = () => {
   return path.join(app.getPath("userData"), "adrus-music", "songs");
 };
 
+// Directorio para las configuraciones
+const getSettingsDirectory = () => {
+  return path.join(app.getPath("userData"), "adrus-music");
+};
+
+// Ruta del archivo de configuraciones
+const getSettingsFilePath = () => {
+  return path.join(getSettingsDirectory(), "settings.json");
+};
+
 const ytdlpPath = getBinaryPath();
 const songsDir = getSongsDirectory();
 
@@ -121,6 +131,61 @@ const ytdlpReadyPromise = downloadYtDlpIfNeeded()
     console.error("No se pudo inicializar YtDlpWrap:", err);
     throw err;
   });
+
+// Configuraciones por defecto
+const defaultSettings = {
+  volume: 80,
+  isMuted: false,
+  repeatMode: "off", // "off" | "all" | "one"
+  isShuffle: false,
+  isDarkMode: false
+};
+
+// Función para asegurar que el directorio de configuraciones existe
+function ensureSettingsDirectoryExists() {
+  const settingsDir = getSettingsDirectory();
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+    console.log("Directorio de configuraciones creado:", settingsDir);
+  }
+}
+
+// Función para cargar configuraciones
+function loadSettings() {
+  ensureSettingsDirectoryExists();
+  const settingsPath = getSettingsFilePath();
+  
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const settingsData = fs.readFileSync(settingsPath, 'utf8');
+      const settings = JSON.parse(settingsData);
+      
+      // Combinar con configuraciones por defecto para asegurar que todas las propiedades existen
+      const mergedSettings = { ...defaultSettings, ...settings };
+      console.log("Configuraciones cargadas:", mergedSettings);
+      return mergedSettings;
+    }
+  } catch (error) {
+    console.error("Error cargando configuraciones:", error);
+  }
+  
+  // Si no se pueden cargar las configuraciones, devolver las por defecto
+  console.log("Usando configuraciones por defecto:", defaultSettings);
+  return defaultSettings;
+}
+
+// Función para guardar configuraciones
+function saveSettings(settings: typeof defaultSettings) {
+  ensureSettingsDirectoryExists();
+  const settingsPath = getSettingsFilePath();
+  
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+    console.log("Configuraciones guardadas:", settings);
+  } catch (error) {
+    console.error("Error guardando configuraciones:", error);
+  }
+}
 
 export function setupIpcHandlers() {
   ipcMain.handle("search-music", async (event, query: string) => {
@@ -256,6 +321,27 @@ export function setupIpcHandlers() {
     } catch (error) {
       console.error("Download error:", error);
       return null;
+    }
+  });
+
+  // Handler para cargar configuraciones
+  ipcMain.handle("load-settings", async () => {
+    try {
+      return loadSettings();
+    } catch (error) {
+      console.error("Error loading settings:", error);
+      return defaultSettings;
+    }
+  });
+
+  // Handler para guardar configuraciones
+  ipcMain.handle("save-settings", async (event, settings) => {
+    try {
+      saveSettings(settings);
+      return true;
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      return false;
     }
   });
 }

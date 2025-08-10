@@ -18,6 +18,12 @@ interface PlayerControlsProps {
   onSeek: (time: number) => void;
   volume: number;
   onVolumeChange: (volume: number) => void;
+  onMuteToggle: (muted: boolean) => void;
+  isMuted: boolean;
+  repeatMode: "off" | "all" | "one";
+  onRepeatModeChange: (mode: "off" | "all" | "one") => void;
+  isShuffle: boolean;
+  onShuffleToggle: (shuffle: boolean) => void;
   onSkipForward: () => void;
   onSkipBack: () => void;
 }
@@ -30,18 +36,28 @@ export function PlayerControls({
   onSeek,
   volume,
   onVolumeChange,
+  onMuteToggle,
+  isMuted,
+  repeatMode,
+  onRepeatModeChange,
+  isShuffle,
+  onShuffleToggle,
   onSkipForward,
   onSkipBack,
 }: PlayerControlsProps) {
-  const [isShuffle, setIsShuffle] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
   const [isDragging, setIsDragging] = useState(false);
   const [isVolumeDragging, setIsVolumeDragging] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [draggedTime, setDraggedTime] = useState(0);
   const [lastVolume, setLastVolume] = useState(volume);
-  const [draggedTime, setDraggedTime] = useState(0); // Tiempo que se mostrará mientras se arrastra
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
+
+  // Actualizar lastVolume cuando volume cambie externamente
+  useEffect(() => {
+    if (volume > 0 && !isMuted) {
+      setLastVolume(volume);
+    }
+  }, [volume, isMuted]);
 
   // Efecto para manejar eventos globales de mouse
   useEffect(() => {
@@ -53,7 +69,9 @@ export function PlayerControls({
         const percentage = x / rect.width;
         const newVolume = Math.round(percentage * 100);
 
-        setIsMuted(false);
+        if (isMuted && newVolume > 0) {
+          onMuteToggle(false);
+        }
         onVolumeChange(newVolume);
       }
 
@@ -139,7 +157,7 @@ export function PlayerControls({
     const percentage = Math.max(0, Math.min(x / rect.width, 1));
     const newVolume = Math.round(percentage * 100);
 
-    setIsMuted(false);
+    onMuteToggle(false);
     onVolumeChange(newVolume);
   };
 
@@ -151,24 +169,24 @@ export function PlayerControls({
 
   const toggleMute = () => {
     if (isMuted) {
-      setIsMuted(false);
+      onMuteToggle(false);
       onVolumeChange(lastVolume);
     } else {
       setLastVolume(volume);
-      setIsMuted(true);
+      onMuteToggle(true);
       onVolumeChange(0);
     }
   };
 
   const toggleShuffle = () => {
-    setIsShuffle(!isShuffle);
+    onShuffleToggle(!isShuffle);
   };
 
   const toggleRepeat = () => {
     const modes: Array<"off" | "all" | "one"> = ["off", "all", "one"];
     const currentIndex = modes.indexOf(repeatMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    setRepeatMode(modes[nextIndex]);
+    onRepeatModeChange(modes[nextIndex]);
   };
 
   // Usar el tiempo arrastrado si estamos arrastrando, sino usar el tiempo actual

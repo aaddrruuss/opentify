@@ -16,3 +16,8 @@ contextBridge.exposeInMainWorld("musicAPI", {
     }
   },
 });
+
+contextBridge.exposeInMainWorld("settingsAPI", {
+  loadSettings: () => ipcRenderer.invoke("load-settings"),
+  saveSettings: (settings: any) => ipcRenderer.invoke("save-settings", settings),
+});
