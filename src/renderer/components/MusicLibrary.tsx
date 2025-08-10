@@ -54,9 +54,9 @@ export function MusicLibrary({
         return (
           <>
             <section className="mb-8">
-              <h2 className="text-2xl font-bold mb-4">Bienvenido</h2>
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <p className="text-gray-600 mb-4">
+              <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Bienvenido</h2>
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border dark:border-gray-700">
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
                   Usa la búsqueda para encontrar música de YouTube. Las canciones se guardan
                   en cache para una reproducción más rápida.
                 </p>
@@ -71,7 +71,7 @@ export function MusicLibrary({
 
             {searchQuery && searchResults.length > 0 && (
               <section>
-                <h2 className="text-2xl font-bold mb-4">Últimas búsquedas</h2>
+                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Últimas búsquedas</h2>
                 <TrackList
                   tracks={searchResults}
                   onTrackSelect={onTrackSelect}
@@ -84,14 +84,14 @@ export function MusicLibrary({
       case "search":
         return (
           <section>
-            <div className="bg-white rounded-md shadow p-4 mb-6">
+            <div className="bg-white dark:bg-gray-800 rounded-md shadow p-4 mb-6 border dark:border-gray-700">
               <form onSubmit={handleSearchSubmit} className="flex gap-2">
                 <input
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder="Buscar canciones, artistas o álbumes en YouTube"
-                  className="flex-1 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:border-transparent"
+                  className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
                   autoFocus
                 />
                 <button
@@ -103,7 +103,7 @@ export function MusicLibrary({
                   Buscar
                 </button>
               </form>
-              <p className="text-sm text-gray-500 mt-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                 💡 Se añade "audio" automáticamente a tu búsqueda y se filtran videos de más de 15 minutos.
                 Las canciones se guardan en cache para reproducción rápida.
               </p>
@@ -112,17 +112,17 @@ export function MusicLibrary({
             {isLoading && (
               <div className="flex justify-center items-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2196F3]"></div>
-                <p className="ml-4 text-gray-600">Buscando canciones...</p>
+                <p className="ml-4 text-gray-600 dark:text-gray-300">Buscando canciones...</p>
               </div>
             )}
 
             {!isLoading && searchResults.length > 0 && (
               <>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                     Resultados para "{searchQuery}"
                   </h2>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
                     {searchResults.length} canciones encontradas (&lt; 15 min)
                   </span>
                 </div>
@@ -135,10 +135,10 @@ export function MusicLibrary({
 
             {!isLoading && searchQuery && searchResults.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-500 mb-2">
+                <p className="text-gray-500 dark:text-gray-400 mb-2">
                   No se encontraron canciones para "{searchQuery}"
                 </p>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-gray-400 dark:text-gray-500">
                   Intenta con términos más específicos. Solo se muestran videos de menos de 15 minutos.
                 </p>
               </div>
@@ -146,11 +146,11 @@ export function MusicLibrary({
 
             {!isLoading && !searchQuery && (
               <div className="text-center py-12">
-                <SearchIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 mb-2">
+                <SearchIcon className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 mb-2">
                   Busca tu música favorita en YouTube
                 </p>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-gray-400 dark:text-gray-500">
                   Solo se mostrarán canciones de menos de 15 minutos de duración
                 </p>
               </div>
@@ -161,12 +161,12 @@ export function MusicLibrary({
       case "library":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4">Tu Biblioteca</h2>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Tu Biblioteca</h2>
             {searchResults.length > 0 ? (
               <TrackList tracks={searchResults} onTrackSelect={onTrackSelect} />
             ) : (
-              <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                <p className="text-gray-500">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center border dark:border-gray-700">
+                <p className="text-gray-500 dark:text-gray-400">
                   Tu biblioteca está vacía. Busca música para comenzar.
                 </p>
               </div>
@@ -177,9 +177,9 @@ export function MusicLibrary({
       case "playlists":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4">Playlists</h2>
-            <div className="bg-white p-6 rounded-md shadow-sm">
-              <p className="text-gray-600 mb-4">
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Playlists</h2>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-md shadow-sm border dark:border-gray-700">
+              <p className="text-gray-600 dark:text-gray-300 mb-4">
                 Las playlists estarán disponibles próximamente.
               </p>
               <button
@@ -195,9 +195,9 @@ export function MusicLibrary({
       case "liked":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4">Canciones Favoritas</h2>
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-              <p className="text-gray-500">
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Canciones Favoritas</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center border dark:border-gray-700">
+              <p className="text-gray-500 dark:text-gray-400">
                 Aún no has marcado canciones como favoritas.
               </p>
             </div>

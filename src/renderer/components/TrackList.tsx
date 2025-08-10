@@ -57,10 +57,10 @@ export function TrackList({ tracks, onTrackSelect }: TrackListProps) {
   };
 
   return (
-    <div className="bg-white rounded-md shadow-sm">
+    <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm border dark:border-gray-700">
       <table className="w-full">
         <thead>
-          <tr className="border-b border-gray-200 text-sm text-gray-500">
+          <tr className="border-b border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
             <th className="p-4 text-left w-10">#</th>
             <th className="p-4 text-left">Título</th>
             <th className="p-4 text-left hidden md:table-cell">Artista</th>
@@ -73,16 +73,16 @@ export function TrackList({ tracks, onTrackSelect }: TrackListProps) {
           {tracks.map((track, index) => (
             <tr
               key={track.id}
-              className="border-b border-gray-200 hover:bg-[#F5F5F5] cursor-pointer group transition-colors"
+              className="border-b border-gray-200 dark:border-gray-700 hover:bg-[#F5F5F5] dark:hover:bg-gray-700 cursor-pointer group transition-colors"
               onClick={() => onTrackSelect(track)}
             >
-              <td className="p-4 text-gray-500 text-sm">
+              <td className="p-4 text-gray-500 dark:text-gray-400 text-sm">
                 <span className="group-hover:hidden">{index + 1}</span>
                 <PlayIcon className="h-4 w-4 hidden group-hover:block text-[#2196F3]" />
               </td>
               <td className="p-4">
                 <div className="flex items-center">
-                  <div className="w-12 h-12 mr-3 flex-shrink-0 bg-gray-100 rounded overflow-hidden border">
+                  <div className="w-12 h-12 mr-3 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden border dark:border-gray-600">
                     <img
                       src={getImageUrl(track)}
                       alt={track.title}
@@ -94,17 +94,17 @@ export function TrackList({ tracks, onTrackSelect }: TrackListProps) {
                     />
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{track.title}</p>
-                    <p className="text-sm text-gray-500 truncate md:hidden">
+                    <p className="font-medium truncate text-gray-900 dark:text-gray-100">{track.title}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate md:hidden">
                       {track.artist}
                     </p>
                   </div>
                 </div>
               </td>
-              <td className="p-4 text-gray-500 hidden md:table-cell">
+              <td className="p-4 text-gray-500 dark:text-gray-400 hidden md:table-cell">
                 <span className="truncate block">{track.artist}</span>
               </td>
-              <td className="p-4 text-right text-gray-500 text-sm">
+              <td className="p-4 text-right text-gray-500 dark:text-gray-400 text-sm">
                 {track.duration}
               </td>
             </tr>

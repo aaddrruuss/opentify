@@ -57,7 +57,7 @@ export function NowPlaying({ track, isPlaying }: NowPlayingProps) {
 
   return (
     <div className="flex items-center p-4">
-      <div className="w-14 h-14 mr-4 flex-shrink-0 bg-gray-100 rounded overflow-hidden border">
+      <div className="w-14 h-14 mr-4 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden border dark:border-gray-600">
         <img
           src={getImageUrl()}
           alt={`${track.title} cover`}
@@ -68,10 +68,10 @@ export function NowPlaying({ track, isPlaying }: NowPlayingProps) {
         />
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-sm truncate">{track.title}</h3>
-        <p className="text-xs text-gray-500 truncate">{track.artist}</p>
+        <h3 className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">{track.title}</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{track.artist}</p>
       </div>
-      <button className="p-2 text-gray-500 hover:text-[#2196F3] flex-shrink-0">
+      <button className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#2196F3] dark:hover:text-[#2196F3] flex-shrink-0 transition-colors">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           className="h-5 w-5"

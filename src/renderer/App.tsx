@@ -16,6 +16,23 @@ export function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(80);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Recuperar preferencia de modo oscuro del localStorage
+    const saved = localStorage.getItem('darkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    // Aplicar clase de modo oscuro al documento
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    
+    // Guardar preferencia en localStorage
+    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+  }, [isDarkMode]);
 
   useEffect(() => {
     // Configurar listeners del servicio de música
@@ -113,12 +130,21 @@ export function App() {
     }
   };
 
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
   return (
-    <div className="flex h-screen w-full bg-white text-gray-800">
-      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
+    <div className="flex h-screen w-full bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
+      <Sidebar 
+        currentView={currentView} 
+        setCurrentView={setCurrentView}
+        isDarkMode={isDarkMode}
+        toggleDarkMode={toggleDarkMode}
+      />
       
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main className="flex-1 overflow-y-auto bg-[#F5F5F5] p-6">
+        <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
           <MusicLibrary
             onTrackSelect={handleTrackSelect}
             currentView={currentView}
@@ -130,7 +156,7 @@ export function App() {
         </main>
         
         {currentTrack && (
-          <div className="flex flex-col bg-white border-t border-gray-200">
+          <div className="flex flex-col bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 transition-colors">
             <NowPlaying
               track={currentTrack}
               isPlaying={isPlaying}

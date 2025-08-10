@@ -45,7 +45,22 @@ class MusicService {
 
   setVolume(volume: number): void {
     if (this.audio) {
-      this.audio.volume = volume / 100;
+      // Convertir el volumen lineal (0-100) a escala logarítmica para un control más natural
+      // Esto hace que los niveles bajos sean mucho más silenciosos
+      let logVolume: number;
+      
+      if (volume === 0) {
+        logVolume = 0;
+      } else {
+        // Usar una escala logarítmica: log10(volume/10 + 1) / log10(11)
+        // Esto da una curva más natural donde el volumen bajo es realmente bajo
+        logVolume = Math.log10(volume / 10 + 1) / Math.log10(11);
+        
+        // Aplicar una curva adicional para hacer los niveles bajos aún más silenciosos
+        logVolume = Math.pow(logVolume, 2);
+      }
+      
+      this.audio.volume = Math.max(0, Math.min(1, logVolume));
     }
   }
 
