@@ -178,6 +178,17 @@ class MusicService {
   getCurrentTrack(): Track | null {
     return this.currentTrack;
   }
+
+  // Método para precargar una canción sin reproducirla
+  async preloadTrack(track: Track): Promise<boolean> {
+    try {
+      const songPath = await window.musicAPI.getSongPath(track.id, track.title, true);
+      return songPath !== null;
+    } catch (error) {
+      console.error("Error precargando canción:", error);
+      return false;
+    }
+  }
 }
 
 export const musicService = new MusicService();

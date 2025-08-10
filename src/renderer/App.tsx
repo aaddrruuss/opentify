@@ -26,6 +26,7 @@ export function App() {
   const [playlist, setPlaylist] = useState<Track[]>([]); // Current playlist for repeat all
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isRestoringTrack, setIsRestoringTrack] = useState(false);
+  const [isPreloadingNext, setIsPreloadingNext] = useState(false);
 
   // Cargar configuraciones al inicio
   useEffect(() => {
@@ -104,6 +105,12 @@ export function App() {
     musicService.onTimeUpdate((time) => {
       setCurrentTime(time);
       setDuration(musicService.getDuration());
+      
+      // Precargar la siguiente canción cuando llevemos 30% de la canción actual
+      const progressPercentage = musicService.getDuration() > 0 ? (time / musicService.getDuration()) * 100 : 0;
+      if (progressPercentage > 30 && !isPreloadingNext && playlist.length > 0) {
+        preloadNextTrack();
+      }
     });
 
     musicService.onEnded(() => {
@@ -132,7 +139,39 @@ export function App() {
         restoreTrack();
       }
     }
-  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, currentTime]);
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, currentTime, isPreloadingNext, playlist.length]);
+
+  // Función para precargar la siguiente canción
+  const preloadNextTrack = async () => {
+    if (isPreloadingNext || playlist.length === 0) return;
+    
+    setIsPreloadingNext(true);
+    
+    try {
+      let nextIndex;
+      if (isShuffle) {
+        // En modo aleatorio, seleccionar una canción aleatoria diferente a la actual
+        const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
+        if (availableIndexes.length === 0) return;
+        nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      } else {
+        // Modo normal: siguiente canción en la lista
+        nextIndex = (currentTrackIndex + 1) % playlist.length;
+      }
+      
+      const nextTrack = playlist[nextIndex];
+      if (nextTrack) {
+        console.log("Precargando siguiente canción:", nextTrack.title);
+        // Precargar la canción en segundo plano
+        await window.musicAPI.getSongPath(nextTrack.id, nextTrack.title);
+        console.log("Canción precargada exitosamente:", nextTrack.title);
+      }
+    } catch (error) {
+      console.error("Error precargando siguiente canción:", error);
+    } finally {
+      setIsPreloadingNext(false);
+    }
+  };
 
   const handleSongEnded = () => {
     if (repeatMode === "one") {
@@ -174,6 +213,7 @@ export function App() {
       setCurrentTrack(track);
       setCurrentTime(0);
       setDuration(0);
+      setIsPreloadingNext(false); // Reset preload flag
       
       // Actualizar playlist si se proporciona
       if (fromPlaylist) {
@@ -202,6 +242,7 @@ export function App() {
       setSearchResults(results);
       // Actualizar playlist con los resultados de búsqueda
       setPlaylist(results);
+      setIsPreloadingNext(false); // Reset preload flag when new search
     } catch (error) {
       console.error('Error en búsqueda:', error);
       setSearchResults([]);
@@ -332,6 +373,14 @@ export function App() {
               onSkipForward={handleSkipForward}
               onSkipBack={handleSkipBack}
             />
+            {isPreloadingNext && (
+              <div className="px-6 pb-2">
+                <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b border-[#2196F3] mr-2"></div>
+                  Precargando siguiente canción...
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

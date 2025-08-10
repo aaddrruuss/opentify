@@ -2,9 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("musicAPI", {
   searchMusic: (query: string) => ipcRenderer.invoke("search-music", query),
-  getSongPath: async (videoId: string, title?: string) => {
+  getSongPath: async (videoId: string, title?: string, preload: boolean = false) => {
     try {
-      const path = await ipcRenderer.invoke("get-song-path", videoId, title);
+      const path = await ipcRenderer.invoke("get-song-path", videoId, title, preload);
       if (path && process.platform === "win32") {
         // En Windows, convertir backslashes a forward slashes para URLs
         return path.replace(/\\/g, '/');
@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("musicAPI", {
       return null;
     }
   },
+  checkSongCache: (videoId: string) => ipcRenderer.invoke("check-song-cache", videoId),
 });
 
 contextBridge.exposeInMainWorld("settingsAPI", {

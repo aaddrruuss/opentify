@@ -258,17 +258,41 @@ export function setupIpcHandlers() {
     }
   });
 
-  ipcMain.handle("get-song-path", async (event, videoId: string, title?: string) => {
+  // Handler para verificar si una canción está en cache sin descargarla
+  ipcMain.handle("check-song-cache", async (event, videoId: string) => {
+    try {
+      const cachedPath = isSongCached(videoId);
+      return {
+        cached: cachedPath !== null,
+        path: cachedPath
+      };
+    } catch (error) {
+      console.error("Error checking cache:", error);
+      return {
+        cached: false,
+        path: null
+      };
+    }
+  });
+
+  // Modificar el handler existente para soportar precarga silenciosa
+  ipcMain.handle("get-song-path", async (event, videoId: string, title?: string, preload: boolean = false) => {
     try {
       // Primero verificar si la canción ya está en cache
       const cachedPath = isSongCached(videoId);
       if (cachedPath) {
-        console.log("Canción encontrada en cache:", cachedPath);
+        if (!preload) {
+          console.log("Canción encontrada en cache:", cachedPath);
+        }
         return cachedPath;
       }
 
       // Si no está en cache, descargarla
-      console.log("Canción no encontrada en cache, descargando:", videoId);
+      if (!preload) {
+        console.log("Canción no encontrada en cache, descargando:", videoId);
+      } else {
+        console.log("Precargando canción:", title || videoId);
+      }
 
       // Esperar a que yt-dlp esté listo antes de continuar
       await ytdlpReadyPromise;
@@ -281,7 +305,9 @@ export function setupIpcHandlers() {
       const finalSongPath = getSongFilePath(videoId, title);
       const tempPath = path.join(songsDir, `${videoId}_temp.%(ext)s`);
 
-      console.log("Descargando canción a:", finalSongPath);
+      if (!preload) {
+        console.log("Descargando canción a:", finalSongPath);
+      }
 
       // Configuración para descargar directamente al directorio de cache
       const args = [
@@ -306,13 +332,19 @@ export function setupIpcHandlers() {
       const tempMp3Path = path.join(songsDir, `${videoId}_temp.mp3`);
       if (fs.existsSync(tempMp3Path)) {
         fs.renameSync(tempMp3Path, finalSongPath);
-        console.log("Canción descargada y guardada en cache:", finalSongPath);
+        if (!preload) {
+          console.log("Canción descargada y guardada en cache:", finalSongPath);
+        } else {
+          console.log("Canción precargada exitosamente:", title || videoId);
+        }
         
         // Mostrar estadísticas del cache
         try {
           const files = fs.readdirSync(songsDir);
           const mp3Files = files.filter(f => f.endsWith('.mp3'));
-          console.log(`Cache de canciones: ${mp3Files.length} archivos`);
+          if (!preload) {
+            console.log(`Cache de canciones: ${mp3Files.length} archivos`);
+          }
         } catch (error) {
           console.error("Error reading cache stats:", error);
         }
@@ -322,7 +354,11 @@ export function setupIpcHandlers() {
         throw new Error("El archivo no se creó correctamente");
       }
     } catch (error) {
-      console.error("Download error:", error);
+      if (!preload) {
+        console.error("Download error:", error);
+      } else {
+        console.error("Preload error:", error);
+      }
       return null;
     }
   });

@@ -10,7 +10,8 @@ export interface Track {
 
 export interface MusicAPI {
   searchMusic: (query: string) => Promise<Track[]>;
-  getSongPath: (videoId: string, title?: string) => Promise<string | null>;
+  getSongPath: (videoId: string, title?: string, preload?: boolean) => Promise<string | null>;
+  checkSongCache: (videoId: string) => Promise<{ cached: boolean; path: string | null }>;
 }
 
 export interface Settings {
