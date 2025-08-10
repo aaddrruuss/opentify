@@ -10,7 +10,7 @@ export interface Track {
 
 export interface MusicAPI {
   searchMusic: (query: string) => Promise<Track[]>;
-  getSongPath: (videoId: string) => Promise<string | null>;
+  getSongPath: (videoId: string, title?: string) => Promise<string | null>;
 }
 
 declare global {

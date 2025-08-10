@@ -11,8 +11,16 @@ const getBinaryPath = () => {
   return path.join(app.getPath("userData"), "bin", binaryName);
 };
 
+// Directorio para el cache de canciones
+const getSongsDirectory = () => {
+  return path.join(app.getPath("userData"), "adrus-music", "songs");
+};
+
 const ytdlpPath = getBinaryPath();
+const songsDir = getSongsDirectory();
+
 console.log("yt-dlp path:", ytdlpPath);
+console.log("Songs cache directory:", songsDir);
 
 // Función para asegurar que el directorio del binario existe
 function ensureBinaryDirExists() {
@@ -20,6 +28,58 @@ function ensureBinaryDirExists() {
   if (!fs.existsSync(binaryDir)) {
     fs.mkdirSync(binaryDir, { recursive: true });
   }
+}
+
+// Función para asegurar que el directorio de canciones existe
+function ensureSongsDirExists() {
+  if (!fs.existsSync(songsDir)) {
+    fs.mkdirSync(songsDir, { recursive: true });
+    console.log("Directorio de canciones creado:", songsDir);
+  }
+}
+
+// Función para limpiar el nombre del archivo (remover caracteres no válidos)
+function sanitizeFileName(fileName: string): string {
+  // Remover caracteres no válidos para nombres de archivo en Windows
+  return fileName.replace(/[<>:"/\\|?*]/g, "_").replace(/\s+/g, "_");
+}
+
+// Función para obtener la ruta del archivo de canción en cache
+function getSongFilePath(videoId: string, title?: string): string {
+  ensureSongsDirExists();
+  
+  // Si tenemos el título, crear un nombre más descriptivo
+  if (title) {
+    const sanitizedTitle = sanitizeFileName(title);
+    return path.join(songsDir, `${videoId}_${sanitizedTitle.substring(0, 50)}.mp3`);
+  }
+  
+  return path.join(songsDir, `${videoId}.mp3`);
+}
+
+// Función para verificar si una canción existe en cache
+function isSongCached(videoId: string): string | null {
+  ensureSongsDirExists();
+  
+  // Buscar archivos que empiecen con el videoId
+  try {
+    const files = fs.readdirSync(songsDir);
+    const cachedFile = files.find(file => 
+      file.startsWith(videoId) && file.endsWith('.mp3')
+    );
+    
+    if (cachedFile) {
+      const fullPath = path.join(songsDir, cachedFile);
+      // Verificar que el archivo existe y tiene contenido
+      if (fs.existsSync(fullPath) && fs.statSync(fullPath).size > 0) {
+        return fullPath;
+      }
+    }
+  } catch (error) {
+    console.error("Error checking song cache:", error);
+  }
+  
+  return null;
 }
 
 // Función para descargar yt-dlp si no existe
@@ -89,10 +149,12 @@ export function setupIpcHandlers() {
           cover: thumbnailOptions[1] // También asignar a cover para compatibilidad
         };
 
-        console.log("Video procesado:", {
+        console.log("Canción procesada:", {
           id: result.id,
           title: result.title,
-          thumbnail: result.thumbnail
+          duration: result.duration,
+          artist: result.artist,
+          cached: isSongCached(result.id) !== null // Indicar si está en cache
         });
 
         return result;
@@ -103,8 +165,18 @@ export function setupIpcHandlers() {
     }
   });
 
-  ipcMain.handle("get-song-path", async (event, videoId: string) => {
+  ipcMain.handle("get-song-path", async (event, videoId: string, title?: string) => {
     try {
+      // Primero verificar si la canción ya está en cache
+      const cachedPath = isSongCached(videoId);
+      if (cachedPath) {
+        console.log("Canción encontrada en cache:", cachedPath);
+        return cachedPath;
+      }
+
+      // Si no está en cache, descargarla
+      console.log("Canción no encontrada en cache, descargando:", videoId);
+
       // Esperar a que yt-dlp esté listo antes de continuar
       await ytdlpReadyPromise;
 
@@ -112,23 +184,17 @@ export function setupIpcHandlers() {
         throw new Error("YtDlpWrap no está inicializado");
       }
 
-      const tempDir = app.getPath("temp");
-      const songPath = path.join(tempDir, `${videoId}.%(ext)s`);
-      const finalSongPath = path.join(tempDir, `${videoId}.mp3`);
+      // Crear la ruta de destino en el directorio de canciones
+      const finalSongPath = getSongFilePath(videoId, title);
+      const tempPath = path.join(songsDir, `${videoId}_temp.%(ext)s`);
 
-      // Si la canción ya está descargada, devolvemos la ruta
-      if (fs.existsSync(finalSongPath)) {
-        console.log("Canción ya descargada:", finalSongPath);
-        return finalSongPath;
-      }
+      console.log("Descargando canción a:", finalSongPath);
 
-      console.log("Descargando canción:", videoId);
-
-      // Configuración específica para Windows
+      // Configuración para descargar directamente al directorio de cache
       const args = [
         `https://www.youtube.com/watch?v=${videoId}`,
         "-f", "bestaudio/best",
-        "-o", songPath,
+        "-o", tempPath,
         "--extract-audio",
         "--audio-format", "mp3",
         "--audio-quality", "0", // Mejor calidad
@@ -143,9 +209,21 @@ export function setupIpcHandlers() {
 
       await ytDlpWrapInstance.exec(args);
 
-      // Verificar que el archivo se creó correctamente
-      if (fs.existsSync(finalSongPath)) {
-        console.log("Canción descargada correctamente:", finalSongPath);
+      // Renombrar el archivo temporal al nombre final
+      const tempMp3Path = path.join(songsDir, `${videoId}_temp.mp3`);
+      if (fs.existsSync(tempMp3Path)) {
+        fs.renameSync(tempMp3Path, finalSongPath);
+        console.log("Canción descargada y guardada en cache:", finalSongPath);
+        
+        // Mostrar estadísticas del cache
+        try {
+          const files = fs.readdirSync(songsDir);
+          const mp3Files = files.filter(f => f.endsWith('.mp3'));
+          console.log(`Cache de canciones: ${mp3Files.length} archivos`);
+        } catch (error) {
+          console.error("Error reading cache stats:", error);
+        }
+        
         return finalSongPath;
       } else {
         throw new Error("El archivo no se creó correctamente");

@@ -37,7 +37,7 @@ export function MusicLibrary({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim()) {
-      onSearch(inputValue);
+      onSearch(inputValue.trim());
     }
   };
 
@@ -50,8 +50,8 @@ export function MusicLibrary({
               <h2 className="text-2xl font-bold mb-4">Bienvenido</h2>
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <p className="text-gray-600 mb-4">
-                  Usa la búsqueda para encontrar música de YouTube y
-                  reproducirla.
+                  Usa la búsqueda para encontrar música de YouTube. Las canciones se guardan
+                  en cache para una reproducción más rápida.
                 </p>
                 <button
                   onClick={() => onSearch("música popular 2024")}
@@ -96,11 +96,16 @@ export function MusicLibrary({
                   Buscar
                 </button>
               </form>
+              <p className="text-sm text-gray-500 mt-2">
+                💡 Las canciones se guardan automáticamente en cache para reproducción rápida.
+                Solo se descargan una vez.
+              </p>
             </div>
 
             {isLoading && (
               <div className="flex justify-center items-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2196F3]"></div>
+                <p className="ml-4 text-gray-600">Buscando...</p>
               </div>
             )}
 

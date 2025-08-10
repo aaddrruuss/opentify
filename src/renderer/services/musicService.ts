@@ -6,12 +6,14 @@ class MusicService {
 
   async play(track: Track): Promise<void> {
     try {
-      // Obtener la ruta local del archivo descargado
-      const songPath = await window.musicAPI.getSongPath(track.id);
+      // Obtener la ruta local del archivo (desde cache o descarga)
+      const songPath = await window.musicAPI.getSongPath(track.id, track.title);
 
       if (!songPath) {
         throw new Error("No se pudo obtener la ruta de la canción");
       }
+
+      console.log("Reproduciendo desde:", songPath);
 
       if (this.audio) {
         this.audio.pause();

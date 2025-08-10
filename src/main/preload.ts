@@ -2,9 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("musicAPI", {
   searchMusic: (query: string) => ipcRenderer.invoke("search-music", query),
-  getSongPath: async (videoId: string) => {
+  getSongPath: async (videoId: string, title?: string) => {
     try {
-      const path = await ipcRenderer.invoke("get-song-path", videoId);
+      const path = await ipcRenderer.invoke("get-song-path", videoId, title);
       if (path && process.platform === "win32") {
         // En Windows, convertir backslashes a forward slashes para URLs
         return path.replace(/\\/g, '/');
