@@ -48,7 +48,7 @@ export function App() {
 
     // Establecer volumen inicial
     musicService.setVolume(volume);
-  }, []);
+  }, [volume]);
 
   const handlePlayPause = async () => {
     if (!currentTrack) return;
@@ -58,7 +58,8 @@ export function App() {
         musicService.pause();
         setIsPlaying(false);
       } else {
-        if (currentTime > 0) {
+        // Si hay una canción pausada, reanudar; si no, reproducir desde el inicio
+        if (musicService.getCurrentTrack()?.id === currentTrack.id && musicService.getCurrentTime() > 0) {
           musicService.resume();
         } else {
           await musicService.play(currentTrack);
