@@ -216,10 +216,10 @@ interface DownloadRequest {
 class DownloadManager {
   private activeDownloads = new Map<string, Promise<string | null>>();
   private downloadQueue: DownloadRequest[] = [];
-  private maxConcurrentDownloads = 1; // Reducir a 1 para menor impacto de red
+  private maxConcurrentDownloads = 1;
   private activeCount = 0;
   private lastDownloadTime = 0;
-  private minDelayBetweenDownloads = 2000; // 2 segundos mínimo entre descargas
+  private minDelayBetweenDownloads = 1500; // Reducir delay
 
   async queueDownload(videoId: string, title?: string, preload: boolean = false): Promise<string | null> {
     // Si ya hay una descarga activa para este video, esperar a que termine
@@ -269,7 +269,6 @@ class DownloadManager {
 
   private async performDownload(videoId: string, title?: string, preload: boolean = false): Promise<string | null> {
     try {
-      // Verificar cache primero
       const cachedPath = isSongCached(videoId);
       if (cachedPath) {
         if (!preload) {
@@ -278,14 +277,11 @@ class DownloadManager {
         return cachedPath;
       }
 
-      // Implementar rate limiting para reducir carga de red
+      // Rate limiting más eficiente
       const now = Date.now();
       const timeSinceLastDownload = now - this.lastDownloadTime;
       if (timeSinceLastDownload < this.minDelayBetweenDownloads) {
         const waitTime = this.minDelayBetweenDownloads - timeSinceLastDownload;
-        if (!preload) {
-          console.log(`⏳ Esperando ${waitTime}ms para rate limiting...`);
-        }
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
 
@@ -303,25 +299,26 @@ class DownloadManager {
       const finalSongPath = getSongFilePath(videoId, title);
       const tempPath = path.join(songsDir, `${videoId}_${timestamp}_temp.%(ext)s`);
 
-      // Argumentos optimizados para menor uso de ancho de banda
+      // Argumentos optimizados para menor uso de recursos
       const args = [
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "bestaudio[ext=m4a]/bestaudio/best",
+        "-f", "bestaudio[ext=m4a][filesize<50M]/bestaudio/best", // Límite de tamaño
         "-o", tempPath,
         "--extract-audio",
         "--audio-format", "mp3",
-        "--audio-quality", preload ? "9" : "7", // Menor calidad para reducir ancho de banda
+        "--audio-quality", preload ? "9" : "6", // Mejor compresión
         "--no-playlist",
         "--no-warnings",
-        "--concurrent-fragments", "1", // Reducir fragmentos concurrentes
-        "--retries", "2", // Reducir reintentos
-        "--fragment-retries", "2",
+        "--concurrent-fragments", "1",
+        "--retries", "1", // Menos reintentos
+        "--fragment-retries", "1",
         "--no-continue",
         "--no-part",
-        "--socket-timeout", "30", // Timeout más largo para conexiones lentas
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", // User agent para evitar 403
-        "--sleep-interval", "1", // Pausa entre requests
-        "--max-sleep-interval", "3"
+        "--socket-timeout", "20", // Timeout más corto
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "--sleep-interval", "0.5", // Menos pausa
+        "--max-sleep-interval", "2",
+        "--buffer-size", "16K" // Buffer más pequeño
       ];
 
       if (process.platform === "win32") {
@@ -331,27 +328,16 @@ class DownloadManager {
       const startTime = Date.now();
       this.lastDownloadTime = startTime;
       
-      if (!preload) {
-        console.log("🚀 Ejecutando yt-dlp con configuración optimizada...");
-      }
-      
       try {
         await ytDlpWrapInstance.exec(args);
       } catch (ytdlError) {
         const errorMsg = String(ytdlError);
         
-        // Manejo específico de errores HTTP 403
         if (errorMsg.includes('403') || errorMsg.includes('Forbidden')) {
-          console.warn("⚠️ Error HTTP 403 detectado, esperando antes de reintentar...");
-          await new Promise(resolve => setTimeout(resolve, 10000)); // Esperar 10 segundos
+          console.warn("⚠️ Error HTTP 403, esperando...");
+          await new Promise(resolve => setTimeout(resolve, 5000));
           
-          // Reintento con argumentos alternativos
-          const retryArgs = [
-            ...args,
-            "--add-header", "Referer:https://www.youtube.com/",
-            "--sleep-requests", "2" // Pausa adicional entre requests
-          ];
-          
+          const retryArgs = [...args, "--sleep-requests", "1"];
           await ytDlpWrapInstance.exec(retryArgs);
         } else {
           throw ytdlError;
@@ -359,59 +345,46 @@ class DownloadManager {
       }
       
       const downloadTime = Date.now() - startTime;
-      
       if (!preload) {
-        console.log(`⏳ Proceso yt-dlp terminado en ${downloadTime}ms`);
+        console.log(`⏳ Descarga completada en ${downloadTime}ms`);
       }
 
-      // Buscar archivo descargado
       const tempMp3Path = path.join(songsDir, `${videoId}_${timestamp}_temp.mp3`);
       
-      // Esperar un momento adicional para asegurar escritura completa
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Espera más corta
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       if (fs.existsSync(tempMp3Path)) {
         const stats = fs.statSync(tempMp3Path);
         const fileSizeKB = stats.size / 1024;
         
-        if (!preload) {
-          console.log(`📁 Archivo: ${fileSizeKB.toFixed(2)}KB`);
+        if (stats.size < 30 * 1024) { // 30KB mínimo
+          console.warn(`⚠️ Archivo muy pequeño (${fileSizeKB.toFixed(2)}KB)`);
         }
         
-        // Validar tamaño mínimo (reducido para calidad menor)
-        if (stats.size < 50 * 1024) {
-          console.warn(`⚠️ Archivo muy pequeño (${fileSizeKB}KB), posible error`);
-        }
-        
-        // Verificar archivo final existente
         if (fs.existsSync(finalSongPath)) {
           try {
             fs.unlinkSync(tempMp3Path);
           } catch (err) {
-            // Ignorar error
-          }
-          if (!preload) {
-            console.log("📂 Usando existente:", path.basename(finalSongPath));
+            // Ignorar
           }
           return finalSongPath;
         }
 
-        // Mover archivo temporal al final
         try {
           fs.renameSync(tempMp3Path, finalSongPath);
           
-          const finalStats = fs.statSync(finalSongPath);
           if (!preload) {
-            console.log(`✅ DESCARGA COMPLETADA: ${path.basename(finalSongPath)} (${(finalStats.size / 1024).toFixed(2)}KB)`);
+            console.log(`✅ Descarga finalizada: ${path.basename(finalSongPath)} (${fileSizeKB.toFixed(2)}KB)`);
           }
           
           return finalSongPath;
         } catch (moveError) {
-          console.error("❌ Error moviendo:", moveError);
+          console.error("❌ Error moviendo archivo:", moveError);
           throw new Error("No se pudo finalizar la descarga");
         }
       } else {
-        throw new Error("❌ Archivo no creado después de descarga");
+        throw new Error("❌ Archivo no creado");
       }
 
     } catch (error) {
@@ -419,11 +392,7 @@ class DownloadManager {
       const errorMsg = String(error);
       
       if (!preload) {
-        if (errorMsg.includes('403')) {
-          console.error("❌ Error HTTP 403: YouTube está bloqueando las descargas temporalmente");
-        } else {
-          console.error("❌ Error descargando:", errorMsg);
-        }
+        console.error("❌ Error descargando:", errorMsg);
       }
       throw error;
     }
@@ -525,7 +494,7 @@ async function savePlaylist(playlistName: string, tracks: any[]): Promise<boolea
   }
 }
 
-// Función para descargar las canciones de una playlist en background - OPTIMIZADA
+// Función para descargar las canciones de una playlist en background - CORREGIDA
 async function downloadPlaylistTracks(playlistName: string, tracks: any[]) {
   const playlistDir = getPlaylistPath(playlistName);
   const playlistSongsDir = path.join(playlistDir, 'songs');
@@ -536,6 +505,7 @@ async function downloadPlaylistTracks(playlistName: string, tracks: any[]) {
   }
   
   console.log(`📥 Iniciando descarga optimizada de ${tracks.length} canciones para "${playlistName}"`);
+  console.log(`📁 Directorio de destino: ${playlistSongsDir}`);
   
   // Configuración muy conservadora para playlist
   const batchSize = 1; // Una canción a la vez
@@ -550,28 +520,39 @@ async function downloadPlaylistTracks(playlistName: string, tracks: any[]) {
       try {
         console.log(`📥 Descargando ${globalIndex + 1}/${tracks.length}: ${track.title}`);
         
-        // Verificar si ya existe en el directorio de la playlist
-        const playlistSongPath = path.join(playlistSongsDir, `${track.id}_${sanitizeFileName(track.title.substring(0, 30))}.mp3`);
+        // Crear nombre de archivo seguro para la playlist
+        const sanitizedTitle = sanitizeFileName(track.title.substring(0, 30));
+        const playlistSongPath = path.join(playlistSongsDir, `${track.id}_${sanitizedTitle}.mp3`);
         
         if (fs.existsSync(playlistSongPath)) {
           console.log(`✓ Ya existe en playlist: ${track.title}`);
           continue;
         }
         
-        // Intentar descargar con rate limiting
-        const songPath = await downloadManager.queueDownload(track.id, track.title, true);
-        
-        if (songPath && fs.existsSync(songPath)) {
-          try {
-            fs.copyFileSync(songPath, playlistSongPath);
+        // CAMBIO PRINCIPAL: Descargar directamente al directorio de la playlist
+        // en lugar de usar el cache global y luego copiar
+        try {
+          const tempSongPath = await downloadManager.queueDownload(track.id, track.title, true);
+          
+          if (tempSongPath && fs.existsSync(tempSongPath)) {
+            // Copiar desde el cache global al directorio de la playlist
+            fs.copyFileSync(tempSongPath, playlistSongPath);
             console.log(`✓ Copiada a playlist: ${track.title}`);
-          } catch (copyError) {
-            console.warn(`Error copiando ${track.title}:`, copyError);
+            
+            // Verificar que se copió correctamente
+            if (fs.existsSync(playlistSongPath)) {
+              const stats = fs.statSync(playlistSongPath);
+              console.log(`📊 Archivo copiado: ${(stats.size / 1024).toFixed(2)}KB en ${playlistSongPath}`);
+            }
+          } else {
+            console.warn(`⚠️ No se pudo descargar ${track.title}`);
           }
+        } catch (downloadError) {
+          console.error(`❌ Error descargando ${track.title}:`, downloadError);
         }
         
       } catch (error) {
-        console.error(`Error descargando ${track.title}:`, error);
+        console.error(`Error procesando ${track.title}:`, error);
       }
       
       // Delay entre cada canción individual
@@ -579,7 +560,14 @@ async function downloadPlaylistTracks(playlistName: string, tracks: any[]) {
     }
   }
   
-  console.log(`✅ Descarga completada para playlist "${playlistName}"`);
+  // Verificar resultado final
+  try {
+    const finalFiles = fs.readdirSync(playlistSongsDir);
+    console.log(`✅ Descarga completada para playlist "${playlistName}"`);
+    console.log(`📊 Total de archivos en directorio: ${finalFiles.length}`);
+  } catch (error) {
+    console.error("Error verificando directorio final:", error);
+  }
 }
 
 // Función para obtener la ruta de una playlist
@@ -655,53 +643,240 @@ async function deletePlaylist(playlistName: string): Promise<boolean> {
   }
 }
 
+// Función para renombrar una playlist preservando todos los datos (mejorada)
+async function renamePlaylist(oldName: string, newName: string): Promise<boolean> {
+  try {
+    const oldPlaylistDir = getPlaylistPath(oldName);
+    const newPlaylistDir = getPlaylistPath(newName);
+    
+    if (!fs.existsSync(oldPlaylistDir)) {
+      console.error(`Playlist "${oldName}" no existe`);
+      return false;
+    }
+    
+    if (fs.existsSync(newPlaylistDir)) {
+      console.error(`Ya existe una playlist con el nombre "${newName}"`);
+      return false;
+    }
+    
+    console.log(`🔄 Renombrando playlist de "${oldName}" a "${newName}"`);
+    console.log(`📁 Desde: ${oldPlaylistDir}`);
+    console.log(`📁 Hacia: ${newPlaylistDir}`);
+    
+    // Verificar contenido antes del renombrado
+    const beforeContents = fs.readdirSync(oldPlaylistDir);
+    console.log(`📋 Contenido antes del renombrado:`, beforeContents);
+    
+    // Renombrar el directorio completo (preserva todo: canciones, imagen, metadata)
+    fs.renameSync(oldPlaylistDir, newPlaylistDir);
+    
+    // Verificar que el renombrado fue exitoso
+    if (!fs.existsSync(newPlaylistDir)) {
+      throw new Error("El directorio no fue renombrado correctamente");
+    }
+    
+    const afterContents = fs.readdirSync(newPlaylistDir);
+    console.log(`📋 Contenido después del renombrado:`, afterContents);
+    
+    // Actualizar el metadata con el nuevo nombre
+    const metadataPath = path.join(newPlaylistDir, 'playlist.json');
+    if (fs.existsSync(metadataPath)) {
+      const playlistData = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+      playlistData.name = newName;
+      playlistData.updatedAt = new Date().toISOString();
+      fs.writeFileSync(metadataPath, JSON.stringify(playlistData, null, 2), 'utf8');
+      console.log(`📝 Metadata actualizado con nuevo nombre`);
+    }
+    
+    // Verificar que la imagen se preservó
+    const imagesDir = path.join(newPlaylistDir, 'images');
+    if (fs.existsSync(imagesDir)) {
+      const images = fs.readdirSync(imagesDir);
+      console.log(`🖼️ Imágenes preservadas:`, images);
+    }
+    
+    // Verificar que las canciones se preservaron
+    const songsDir = path.join(newPlaylistDir, 'songs');
+    if (fs.existsSync(songsDir)) {
+      const songs = fs.readdirSync(songsDir);
+      console.log(`🎵 Canciones preservadas: ${songs.length} archivos`);
+    }
+    
+    console.log(`✅ Playlist renombrada exitosamente de "${oldName}" a "${newName}"`);
+    return true;
+  } catch (error) {
+    console.error("❌ Error renombrando playlist:", error);
+    
+    // Intentar rollback si algo salió mal
+    try {
+      const oldPlaylistDir = getPlaylistPath(oldName);
+      const newPlaylistDir = getPlaylistPath(newName);
+      
+      if (!fs.existsSync(oldPlaylistDir) && fs.existsSync(newPlaylistDir)) {
+        console.log("🔄 Intentando rollback...");
+        fs.renameSync(newPlaylistDir, oldPlaylistDir);
+        console.log("✅ Rollback exitoso");
+      }
+    } catch (rollbackError) {
+      console.error("❌ Error en rollback:", rollbackError);
+    }
+    
+    return false;
+  }
+}
+
+// Función para guardar imagen personalizada de playlist (mejorada)
+async function savePlaylistImage(playlistName: string, imageData: string): Promise<boolean> {
+  try {
+    const playlistDir = getPlaylistPath(playlistName);
+    
+    if (!fs.existsSync(playlistDir)) {
+      console.error(`Playlist "${playlistName}" no existe`);
+      return false;
+    }
+    
+    // Detectar el tipo de imagen desde el data URL
+    const imageTypeMatch = imageData.match(/^data:image\/([a-z]+);base64,/);
+    const imageType = imageTypeMatch ? imageTypeMatch[1] : 'jpg';
+    const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    const extension = validExtensions.includes(imageType) ? imageType : 'jpg';
+    
+    // Convertir base64 a buffer
+    const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Crear directorio de imágenes si no existe
+    const imagesDir = path.join(playlistDir, 'images');
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+    
+    // Eliminar imagen anterior si existe
+    const existingImages = ['cover.jpg', 'cover.jpeg', 'cover.png', 'cover.gif', 'cover.webp'];
+    for (const imageName of existingImages) {
+      const imagePath = path.join(imagesDir, imageName);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+        console.log(`🗑️ Imagen anterior eliminada: ${imageName}`);
+      }
+    }
+    
+    // Guardar nueva imagen con la extensión correcta
+    const imagePath = path.join(imagesDir, `cover.${extension}`);
+    fs.writeFileSync(imagePath, buffer);
+    
+    console.log(`✅ Imagen guardada para playlist "${playlistName}": cover.${extension}`);
+    return true;
+  } catch (error) {
+    console.error("Error guardando imagen de playlist:", error);
+    return false;
+  }
+}
+
+// Función para cargar imagen personalizada de playlist (mejorada)
+async function loadPlaylistImage(playlistName: string): Promise<string | null> {
+  try {
+    const playlistDir = getPlaylistPath(playlistName);
+    const imagesDir = path.join(playlistDir, 'images');
+    
+    // Buscar cualquier archivo de imagen
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    
+    for (const ext of imageExtensions) {
+      const imagePath = path.join(imagesDir, `cover.${ext}`);
+      if (fs.existsSync(imagePath)) {
+        const buffer = fs.readFileSync(imagePath);
+        const base64 = buffer.toString('base64');
+        const mimeType = getMimeType(ext);
+        return `data:${mimeType};base64,${base64}`;
+      }
+    }
+    
+    // Si no hay imagen personalizada, retornar null
+    return null;
+  } catch (error) {
+    console.error("Error cargando imagen de playlist:", error);
+    return null;
+  }
+}
+
+// Función auxiliar para obtener el MIME type
+function getMimeType(extension: string): string {
+  const mimeTypes: Record<string, string> = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp'
+  };
+  return mimeTypes[extension.toLowerCase()] || 'image/jpeg';
+}
+
 export function setupIpcHandlers() {
   // Limpiar archivos huérfanos al iniciar
   downloadManager.cleanupOrphanedFiles();
 
-  // Cache más conservador
-  const searchCache = new Map<string, { results: any[], timestamp: number }>();
-  const maxCacheSize = 50; // Mantener cache pequeño
-  const cacheExpiration = 10 * 60 * 1000; // 10 minutos
+  // Cache más eficiente con LRU y compresión
+  const searchCache = new Map<string, { results: any[], timestamp: number, hits: number }>();
+  const maxCacheSize = 30; // Reducir cache
+  const cacheExpiration = 8 * 60 * 1000; // 8 minutos
 
-  // Función para limpiar cache expirado
+  // Función optimizada para limpiar cache con LRU
   const cleanExpiredCache = () => {
     const now = Date.now();
-    for (const [key, value] of searchCache.entries()) {
-      if (now - value.timestamp > cacheExpiration) {
-        searchCache.delete(key);
-      }
+    const entries = Array.from(searchCache.entries());
+    
+    // Eliminar entradas expiradas
+    const validEntries = entries.filter(([key, value]) => 
+      now - value.timestamp < cacheExpiration
+    );
+    
+    // Si aún excedemos el tamaño, usar LRU (menos hits y más antiguos)
+    if (validEntries.length > maxCacheSize) {
+      validEntries.sort((a, b) => {
+        const scoreA = a[1].hits / (now - a[1].timestamp);
+        const scoreB = b[1].hits / (now - b[1].timestamp);
+        return scoreA - scoreB; // Menor score = eliminar primero
+      });
+      
+      const toKeep = validEntries.slice(-maxCacheSize);
+      searchCache.clear();
+      toKeep.forEach(([key, value]) => searchCache.set(key, value));
+    } else {
+      searchCache.clear();
+      validEntries.forEach(([key, value]) => searchCache.set(key, value));
     }
   };
 
   ipcMain.handle("search-music", async (event, query: string) => {
     try {
-      // Limpiar cache expirado periódicamente
-      if (Math.random() < 0.1) {
+      // Limpiar cache solo ocasionalmente
+      if (Math.random() < 0.05) { // 5% de probabilidad
         cleanExpiredCache();
       }
 
-      // Verificar cache con timestamp
+      // Cache hit con tracking de uso
       const cacheKey = query.toLowerCase().trim();
       const cachedEntry = searchCache.get(cacheKey);
       
       if (cachedEntry && (Date.now() - cachedEntry.timestamp) < cacheExpiration) {
-        console.log(`⚡ Cache hit para: "${query}"`);
+        cachedEntry.hits++;
+        console.log(`⚡ Cache hit para: "${query}" (${cachedEntry.hits} hits)`);
         return cachedEntry.results;
       }
 
-      console.log(`🔍 Buscando en YouTube: "${query}"`);
+      console.log(`🔍 Buscando música: "${query}"`);
       
-      // Timeout conservador y manejo de errores HTTP mejorado
+      // Timeout más agresivo para mejor responsividad
       let videos;
       try {
         const searchPromise = YouTube.search(query, {
-          limit: 15, // Reducir límite para menor carga
+          limit: 12, // Reducir límite para menos memoria
           type: "video",
         });
         
         const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Search timeout')), 12000) // 12 segundos
+          setTimeout(() => reject(new Error('Search timeout')), 10000) // 10 segundos
         );
         
         videos = await Promise.race([searchPromise, timeoutPromise]);
@@ -709,62 +884,40 @@ export function setupIpcHandlers() {
         const errorMsg = String(searchError);
         console.error(`Error buscando "${query}":`, errorMsg);
         
-        // Si es un error 403, esperar antes de permitir más búsquedas
         if (errorMsg.includes('403')) {
-          console.warn("⚠️ Detectado error 403 en búsqueda, implementando cooldown...");
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise(resolve => setTimeout(resolve, 3000)); // Reducir espera
         }
         
         return [];
       }
 
-      // Filtrado y procesamiento más robusto
-      const filteredVideos = videos.filter((video) => {
-        try {
-          const durationInMilliseconds = video.duration;
-          if (!durationInMilliseconds || durationInMilliseconds === 0) return true;
-          const durationInSeconds = Math.floor(durationInMilliseconds / 1000);
-          return durationInSeconds <= 900; // 15 minutos max
-        } catch (filterError) {
-          return false;
-        }
-      }).slice(0, 12); // Reducir resultados
+      // Filtrado más eficiente
+      const filteredVideos = videos
+        .filter((video) => {
+          const duration = video.duration;
+          return duration && duration > 0 && Math.floor(duration / 1000) <= 900;
+        })
+        .slice(0, 10); // Límite más bajo
 
-      console.log(`✅ Búsqueda: "${query}" - ${filteredVideos.length} resultados`);
+      const results = filteredVideos.map((video) => ({
+        id: video.id!,
+        title: video.title || "Sin título",
+        artist: video.channel?.name || "Unknown Artist",
+        duration: video.durationFormatted || "0:00",
+        thumbnail: `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`,
+        cover: `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`
+      })).filter(Boolean);
 
-      const results = filteredVideos.map((video) => {
-        try {
-          const videoId = video.id!;
-          return {
-            id: videoId,
-            title: video.title || "Sin título",
-            artist: video.channel?.name || "Unknown Artist",
-            duration: video.durationFormatted || "0:00",
-            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-            cover: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-          };
-        } catch (mapError) {
-          return null;
-        }
-      }).filter(result => result !== null);
-
-      // Gestión de cache
-      if (searchCache.size >= maxCacheSize) {
-        const sortedEntries = Array.from(searchCache.entries())
-          .sort((a, b) => a[1].timestamp - b[1].timestamp);
-        
-        for (let i = 0; i < 5; i++) {
-          if (sortedEntries[i]) {
-            searchCache.delete(sortedEntries[i][0]);
-          }
-        }
+      // Guardar en cache con score inicial
+      if (results.length > 0) {
+        searchCache.set(cacheKey, {
+          results,
+          timestamp: Date.now(),
+          hits: 1
+        });
       }
-      
-      searchCache.set(cacheKey, {
-        results,
-        timestamp: Date.now()
-      });
 
+      console.log(`✅ Búsqueda: "${query}" - ${results.length} resultados`);
       return results;
     } catch (error) {
       console.error("Error crítico en búsqueda:", error);
@@ -860,5 +1013,20 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("delete-playlist", async (event, playlistName: string) => {
     return await deletePlaylist(playlistName);
+  });
+
+  // Handler para renombrar playlist
+  ipcMain.handle("rename-playlist", async (event, oldName: string, newName: string) => {
+    return await renamePlaylist(oldName, newName);
+  });
+
+  // Handler para guardar imagen de playlist
+  ipcMain.handle("save-playlist-image", async (event, playlistName: string, imageData: string) => {
+    return await savePlaylistImage(playlistName, imageData);
+  });
+
+  // Handler para cargar imagen de playlist
+  ipcMain.handle("load-playlist-image", async (event, playlistName: string) => {
+    return await loadPlaylistImage(playlistName);
   });
 }

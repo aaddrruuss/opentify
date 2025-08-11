@@ -23,11 +23,12 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   saveSettings: (settings: any) => ipcRenderer.invoke("save-settings", settings),
 });
 
-const playlistAPI = {
+contextBridge.exposeInMainWorld("playlistAPI", {
   savePlaylist: (name: string, tracks: any[]) => ipcRenderer.invoke('save-playlist', name, tracks),
   loadPlaylist: (name: string) => ipcRenderer.invoke('load-playlist', name),
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
   deletePlaylist: (name: string) => ipcRenderer.invoke('delete-playlist', name),
-};
-
-contextBridge.exposeInMainWorld('playlistAPI', playlistAPI);
+  renamePlaylist: (oldName: string, newName: string) => ipcRenderer.invoke("rename-playlist", oldName, newName),
+  savePlaylistImage: (playlistName: string, imageData: string) => ipcRenderer.invoke("save-playlist-image", playlistName, imageData),
+  loadPlaylistImage: (playlistName: string) => ipcRenderer.invoke("load-playlist-image", playlistName),
+});

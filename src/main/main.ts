@@ -8,17 +8,20 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, "../../assets/images/icon.png"),
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.js"), // Esto debería seguir como .js ya que TypeScript se compila a .js
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false, // Permitir cargar archivos locales
+      webSecurity: false,
+      // Optimizaciones de rendimiento
+      backgroundThrottling: false, // Evitar throttling en background
+      experimentalFeatures: false,
     },
-    // Configuraciones específicas para Windows
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    show: false, // No mostrar hasta que esté listo
   });
 
-  // Configurar CSP más permisiva para imágenes externas
+  // Configurar CSP optimizada
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -30,30 +33,49 @@ function createWindow() {
     });
   });
 
-  // Permitir cargar archivos locales
+  // Optimización de memoria
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     callback({});
   });
 
   mainWindow.loadFile(path.join(__dirname, "../index.html"));
 
-  // En desarrollo, abrir DevTools
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.webContents.openDevTools();
-  }
+  // Mostrar ventana solo cuando esté lista
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+    
+    // Focus automático
+    if (process.env.NODE_ENV === 'development') {
+      mainWindow?.webContents.openDevTools();
+    }
+  });
+
+  // Optimizar garbage collection
+  mainWindow.webContents.on('dom-ready', () => {
+    // Forzar garbage collection después de cargar
+    if (global.gc) {
+      global.gc();
+    }
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    // Limpiar memoria
+    if (global.gc) {
+      global.gc();
+    }
   });
 }
 
 app.on("ready", () => {
+  // Configuraciones de rendimiento de la app
+  app.setAppUserModelId('com.yourname.musicplayer');
+  
   createWindow();
   setupIpcHandlers();
 });
 
 app.on("before-quit", () => {
-  // Las configuraciones se guardan automáticamente mediante los efectos de React
   console.log("App closing - settings should be saved automatically");
 });
 
@@ -68,3 +90,13 @@ app.on("activate", () => {
     createWindow();
   }
 });
+
+// Limpieza de memoria cada 10 minutos en desarrollo
+if (process.env.NODE_ENV === 'development') {
+  setInterval(() => {
+    if (global.gc) {
+      global.gc();
+      console.log('🧹 Garbage collection ejecutado');
+    }
+  }, 10 * 60 * 1000);
+}

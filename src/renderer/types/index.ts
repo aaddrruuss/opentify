@@ -35,6 +35,9 @@ export interface PlaylistAPI {
   loadPlaylist: (name: string) => Promise<Track[]>;
   getPlaylists: () => Promise<string[]>;
   deletePlaylist: (name: string) => Promise<boolean>;
+  renamePlaylist: (oldName: string, newName: string) => Promise<boolean>;
+  loadPlaylistImage: (name: string) => Promise<string | null>;
+  savePlaylistImage: (name: string, imageData: string) => Promise<boolean>;
 }
 
 export interface MusicLibraryProps {

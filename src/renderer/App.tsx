@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { NowPlaying } from './components/NowPlaying';
 import { MusicLibrary } from './components/MusicLibrary';
@@ -6,7 +6,29 @@ import { PlayerControls } from './components/PlayerControls';
 import { musicService } from './services/musicService';
 import { Track, Settings } from './types/index';
 
+// Throttle function para optimizar actualizaciones
+const throttle = (func: Function, limit: number) => {
+  let inThrottle: boolean;
+  return function(this: any, ...args: any[]) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  }
+};
+
+// Debounce para acciones de usuario
+const debounce = (func: Function, wait: number) => {
+  let timeout: NodeJS.Timeout;
+  return function(this: any, ...args: any[]) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+};
+
 export function App() {
+  // Estados básicos
   const [currentView, setCurrentView] = useState('home');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -23,23 +45,83 @@ export function App() {
   const [isShuffle, setIsShuffle] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [playlist, setPlaylist] = useState<Track[]>([]); // Current playlist for repeat all
+  const [playlist, setPlaylist] = useState<Track[]>([]);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-  const [playlistName, setPlaylistName] = useState<string>(""); // Nombre de la playlist actual
+  const [playlistName, setPlaylistName] = useState<string>("");
   const [isRestoringTrack, setIsRestoringTrack] = useState(false);
   const [isPreloadingNext, setIsPreloadingNext] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false); // Track if current song is downloading
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false); // Track if audio is loading after download
-  const [savedPosition, setSavedPosition] = useState(0); // Store saved position separately
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [savedPosition, setSavedPosition] = useState(0);
   const [lastActionTime, setLastActionTime] = useState(0);
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   const [importedPlaylists, setImportedPlaylists] = useState<Record<string, Track[]>>({});
 
-  // Cargar configuraciones al inicio
+  // Funciones memoizadas para mejor rendimiento
+  const throttledTimeUpdate = useMemo(
+    () => throttle((time: number) => {
+      setCurrentTime(time);
+      setDuration(musicService.getDuration());
+      
+      const actualIsPlaying = musicService.isPlaying();
+      if (actualIsPlaying !== isPlaying) {
+        setIsPlaying(actualIsPlaying);
+      }
+      
+      if (time > 1 && !isPreloadingNext && playlist.length > 0 && !isDownloading) {
+        preloadNextTrack();
+      }
+    }, 200), // Throttle a 5 FPS en lugar de 60 FPS
+    [isPlaying, isPreloadingNext, playlist.length, isDownloading]
+  );
+
+  // Throttled settings save
+  const throttledSaveSettings = useMemo(
+    () => throttle(async (settings: Settings) => {
+      try {
+        await window.settingsAPI.saveSettings(settings);
+      } catch (error) {
+        console.error("Error guardando configuraciones:", error);
+      }
+    }, 2000), // Guardar máximo cada 2 segundos
+    []
+  );
+
+  // Debounced search
+  const debouncedSearch = useMemo(
+    () => debounce(async (query: string) => {
+      if (!query.trim()) return;
+
+      setIsLoading(true);
+      
+      const displayQuery = query.replace(/ audio$/, '').trim();
+      setSearchQuery(displayQuery);
+      
+      try {
+        const results = await window.musicAPI.searchMusic(query);
+        setSearchResults(results);
+        setPlaylist(results);
+        setIsPreloadingNext(false);
+      } catch (error) {
+        console.error('Error en búsqueda:', error);
+        setSearchResults([]);
+        setPlaylist([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 500), // 500ms debounce
+    []
+  );
+
+  // Cargar configuraciones (optimizado)
   useEffect(() => {
+    let mounted = true;
+    
     const loadInitialSettings = async () => {
       try {
         const settings = await window.settingsAPI.loadSettings();
+        
+        if (!mounted) return;
         
         setVolume(settings.volume);
         setIsMuted(settings.isMuted);
@@ -47,32 +129,30 @@ export function App() {
         setIsShuffle(settings.isShuffle);
         setIsDarkMode(settings.isDarkMode);
         
-        // Restaurar última canción reproducida si existe
         if (settings.lastPlayedTrack && settings.lastPlayedPosition !== undefined) {
           const timeSinceLastPlay = Date.now() - (settings.lastPlayedTime || 0);
-          const maxRestoreTime = 24 * 60 * 60 * 1000; // 24 horas en millisegundos
+          const maxRestoreTime = 24 * 60 * 60 * 1000;
           
-          // Solo restaurar si no ha pasado más de 24 horas
           if (timeSinceLastPlay < maxRestoreTime) {
-            console.log("Restaurando última canción:", settings.lastPlayedTrack.title, "en posición:", settings.lastPlayedPosition);
             setCurrentTrack(settings.lastPlayedTrack);
-            setSavedPosition(settings.lastPlayedPosition); // Store separately
+            setSavedPosition(settings.lastPlayedPosition);
             setIsRestoringTrack(true);
           }
         }
         
-        console.log("Configuraciones cargadas desde archivo:", settings);
         setSettingsLoaded(true);
       } catch (error) {
         console.error("Error cargando configuraciones:", error);
-        setSettingsLoaded(true);
+        if (mounted) setSettingsLoaded(true);
       }
     };
 
     loadInitialSettings();
+    
+    return () => { mounted = false; };
   }, []);
 
-  // Guardar configuraciones cuando cambien
+  // Guardar configuraciones (optimizado)
   useEffect(() => {
     if (!settingsLoaded) return;
 
@@ -87,96 +167,162 @@ export function App() {
       lastPlayedTime: Date.now()
     };
 
-    const saveSettings = async () => {
-      try {
-        await window.settingsAPI.saveSettings(settings);
-      } catch (error) {
-        console.error("Error guardando configuraciones:", error);
-      }
-    };
+    throttledSaveSettings(settings);
+  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded, throttledSaveSettings]);
 
-    saveSettings();
-  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded]);
-
-  // Aplicar modo oscuro
+  // Aplicar modo oscuro (optimizado)
   useEffect(() => {
+    const root = document.documentElement;
     if (isDarkMode) {
-      document.documentElement.classList.add('dark');
+      root.classList.add('dark');
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
     }
   }, [isDarkMode]);
 
-  useEffect(() => {
-    // Configurar listeners del servicio de música
-    musicService.onTimeUpdate((time) => {
-      setCurrentTime(time);
-      setDuration(musicService.getDuration());
-      
-      // Sincronizar estado de reproducción cada vez que se actualiza el tiempo
-      const actualIsPlaying = musicService.isPlaying();
-      if (actualIsPlaying !== isPlaying) {
-        setIsPlaying(actualIsPlaying);
+  const handleSongEnded = useCallback(() => {
+    if (repeatMode === "one") {
+      if (currentTrack) {
+        musicService.repeatCurrentTrack().then(() => {
+          setIsPlaying(true);
+          setCurrentTime(0);
+        }).catch(error => {
+          console.error("Error repitiendo canción:", error);
+          handleTrackSelect(currentTrack);
+        });
       }
-      
-      // Precargar la siguiente canción INMEDIATAMENTE cuando empiece la reproducción
-      // Solo necesitamos verificar que haya comenzado (time > 1 segundo)
-      if (time > 1 && !isPreloadingNext && playlist.length > 0 && !isDownloading) {
-        preloadNextTrack();
+    } else if (repeatMode === "all" || repeatMode === "off") {
+      // Para "all" y "off", ir a la siguiente canción
+      if (playlist.length > 0) {
+        handleSkipForward();
+      } else {
+        // Si no hay playlist, simplemente parar
+        setIsPlaying(false);
       }
-    });
-
-    musicService.onEnded(() => {
+    } else {
+      // Fallback: parar reproducción
       setIsPlaying(false);
-      handleSongEnded();
-    });
+    }
+  }, [repeatMode, currentTrack, playlist.length]);
 
-    // Establecer volumen inicial cuando las configuraciones estén cargadas
+  // Music service setup (optimizado)
+  useEffect(() => {
+    let mounted = true;
+    let timeUpdateCleanup: (() => void) | void;
+    let endedCleanup: (() => void) | void;
+    
+    // Setup listeners con manejo seguro de tipos
+    try {
+      timeUpdateCleanup = musicService.onTimeUpdate(throttledTimeUpdate);
+    } catch (error) {
+      console.error("Error setting up time update listener:", error);
+    }
+
+    try {
+      endedCleanup = musicService.onEnded(() => {
+        if (mounted) {
+          setIsPlaying(false);
+          handleSongEnded();
+        }
+      });
+    } catch (error) {
+      console.error("Error setting up ended listener:", error);
+    }
+
     if (settingsLoaded) {
       musicService.setVolume(isMuted ? 0 : volume);
       
-      // Si estamos restaurando una canción, cargarla y posicionarla SIN reproducir
       if (isRestoringTrack && currentTrack) {
         const restoreTrack = async () => {
+          if (!mounted) return;
+          
           try {
             setIsDownloading(true);
-            console.log("Intentando restaurar canción:", currentTrack.title);
-            
-            // Usar el método específico para restauración que NO reproduce automáticamente
             await musicService.loadTrackForRestore(currentTrack);
             
-            // Esperar un momento para que los metadatos se carguen completamente
             setTimeout(() => {
+              if (!mounted) return;
+              
               if (savedPosition > 0) {
-                musicService.seek(savedPosition); // Ir a la posición guardada
-                setCurrentTime(savedPosition); // Actualizar el tiempo mostrado
-                console.log("Canción restaurada en posición:", savedPosition, "sin reproducir");
+                musicService.seek(savedPosition);
+                setCurrentTime(savedPosition);
               }
               
               setDuration(musicService.getDuration());
               setIsRestoringTrack(false);
               setIsDownloading(false);
-              setSavedPosition(0); // Limpiar la posición guardada
-              
-              console.log("Restauración completada. La canción está lista para reproducir desde:", savedPosition);
+              setSavedPosition(0);
             }, 100);
             
           } catch (error) {
             console.error("Error restaurando canción:", error);
-            // Si falla la restauración, limpiar el estado pero mantener la UI
-            setIsRestoringTrack(false);
-            setIsDownloading(false);
-            setSavedPosition(0);
-            // No limpiar currentTrack para que la UI se mantenga
+            if (mounted) {
+              setIsRestoringTrack(false);
+              setIsDownloading(false);
+              setSavedPosition(0);
+            }
           }
         };
         restoreTrack();
       }
     }
-  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, isPreloadingNext, playlist.length, isDownloading, isPlaying]);
 
-  // Función para precargar la siguiente canción
-  const preloadNextTrack = async () => {
+    return () => {
+      mounted = false;
+      // Cleanup seguro
+      if (timeUpdateCleanup && typeof timeUpdateCleanup === 'function') {
+        try {
+          timeUpdateCleanup();
+        } catch (error) {
+          console.error("Error cleaning up time update listener:", error);
+        }
+      }
+      if (endedCleanup && typeof endedCleanup === 'function') {
+        try {
+          endedCleanup();
+        } catch (error) {
+          console.error("Error cleaning up ended listener:", error);
+        }
+      }
+    };
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, throttledTimeUpdate, handleSongEnded]);
+
+  const handlePlayPause = useCallback(async () => {
+    if (!currentTrack || isDownloading) {
+      return;
+    }
+
+    try {
+      if (isPlaying) {
+        musicService.pause();
+        setIsPlaying(false);
+      } else {
+        const serviceCurrentTrack = musicService.getCurrentTrack();
+        const audioDuration = musicService.getDuration();
+        
+        if (serviceCurrentTrack?.id === currentTrack.id && audioDuration > 0) {
+          musicService.resume();
+          setIsPlaying(true);
+        } else {
+          setIsLoadingAudio(true);
+          try {
+            await musicService.play(currentTrack);
+            setIsPlaying(true);
+            setDuration(musicService.getDuration());
+          } finally {
+            setIsLoadingAudio(false);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error al reproducir/pausar:', error);
+      setIsPlaying(false);
+      setIsLoadingAudio(false);
+    }
+  }, [currentTrack, isDownloading, isPlaying]);
+
+  // Función optimizada para precargar siguiente canción
+  const preloadNextTrack = useCallback(async () => {
     if (isPreloadingNext || playlist.length === 0 || isDownloading) return;
     
     setIsPreloadingNext(true);
@@ -196,88 +342,24 @@ export function App() {
       
       const nextTrack = playlist[nextIndex];
       if (nextTrack) {
-        console.log("Precargando siguiente canción:", nextTrack.title);
-        // Usar el flag preload=true para descarga silenciosa
         await window.musicAPI.getSongPath(nextTrack.id, nextTrack.title, true);
-        console.log("Canción precargada exitosamente:", nextTrack.title);
       }
     } catch (error) {
-      console.error("Error precargando siguiente canción:", error);
+      console.error("Error precargando:", error);
     } finally {
       setIsPreloadingNext(false);
     }
-  };
+  }, [isPreloadingNext, playlist, isDownloading, isShuffle, currentTrackIndex]);
 
-  const handleSongEnded = () => {
-    if (repeatMode === "one") {
-      // Repetir la misma canción usando método especializado
-      if (currentTrack) {
-        console.log("Repitiendo canción:", currentTrack.title);
-        musicService.repeatCurrentTrack().then(() => {
-          setIsPlaying(true);
-          setCurrentTime(0); // Reset UI time
-        }).catch(error => {
-          console.error("Error repitiendo canción:", error);
-          // Fallback: cargar de nuevo la canción
-          handleTrackSelect(currentTrack);
-        });
-      }
-    } else if (repeatMode === "all") {
-      // Reproducir siguiente canción en la playlist
-      handleSkipForward();
-    }
-    // Si repeatMode === "off", no hacer nada (canción termina)
-  };
-
-  const handlePlayPause = async () => {
-    // Only block if downloading, not if just loading audio
-    if (!currentTrack || isDownloading) {
-      console.log("Play/pause bloqueado - descarga en progreso");
-      return;
-    }
-
-    try {
-      if (isPlaying) {
-        musicService.pause();
-        setIsPlaying(false);
-      } else {
-        const serviceCurrentTrack = musicService.getCurrentTrack();
-        const audioDuration = musicService.getDuration();
-        
-        // Si el servicio tiene la misma canción cargada y con duración válida
-        if (serviceCurrentTrack?.id === currentTrack.id && audioDuration > 0) {
-          // Solo reanudar
-          musicService.resume();
-          setIsPlaying(true);
-        } else {
-          // Cargar y reproducir la canción - marcar como loading audio (no downloading)
-          setIsLoadingAudio(true);
-          try {
-            await musicService.play(currentTrack);
-            setIsPlaying(true);
-            setDuration(musicService.getDuration());
-          } finally {
-            setIsLoadingAudio(false);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error al reproducir/pausar:', error);
-      setIsPlaying(false);
-      setIsLoadingAudio(false);
-    }
-  };
-
-  const handleTrackSelect = async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
+  // Track selection optimizada
+  const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
     const now = Date.now();
     
-    if (now - lastActionTime < 500) {
-      console.log("Acción muy rápida, ignorando...");
+    if (now - lastActionTime < 300) {
       return;
     }
     
     if (isDownloading || pendingTrackId) {
-      console.log("Descarga en progreso, ignorando selección de track");
       return;
     }
 
@@ -285,82 +367,54 @@ export function App() {
     setPendingTrackId(track.id);
 
     try {
-      // Detener cualquier reproducción actual
       musicService.stop();
       setIsPlaying(false);
       setIsLoadingAudio(false);
-      
-      // Resetear flag de precarga para permitir nueva precarga
       setIsPreloadingNext(false);
       
-      // Actualizar UI inmediatamente
       setCurrentTrack(track);
       setCurrentTime(0);
       setDuration(0);
       
-      console.log("🔄 INICIANDO DESCARGA:", track.title);
-      
-      // GESTIÓN CRÍTICA DE PLAYLIST - Corregido
       if (fromPlaylist && Array.isArray(fromPlaylist) && fromPlaylist.length > 0) {
         const safeIndex = trackIndex !== undefined ? trackIndex : fromPlaylist.findIndex(t => t.id === track.id);
-        console.log(`📋 Configurando playlist con ${fromPlaylist.length} canciones, índice: ${safeIndex}`);
         
-        setPlaylist([...fromPlaylist]); // Crear copia para evitar referencias
+        setPlaylist([...fromPlaylist]);
         setCurrentTrackIndex(safeIndex >= 0 ? safeIndex : 0);
         
-        // Determinar nombre de playlist
         if (fromPlaylist === searchResults) {
           setPlaylistName("Resultados de búsqueda");
         } else {
-          // Buscar en playlists importadas
           const playlistEntry = Object.entries(importedPlaylists).find(([name, tracks]) => {
             return tracks.length === fromPlaylist.length && 
                    tracks.every((t, i) => t.id === fromPlaylist[i]?.id);
           });
           setPlaylistName(playlistEntry ? playlistEntry[0] : "Playlist personalizada");
         }
-        
-        console.log(`🎵 Playlist configurada: "${playlistName}" - Canción ${safeIndex + 1}/${fromPlaylist.length}`);
       } else {
-        // Playlist de una sola canción
-        console.log("🎵 Canción individual");
         setPlaylist([track]);
         setCurrentTrackIndex(0);
         setPlaylistName("Canción individual");
       }
       
-      // Proceso de descarga
       setIsDownloading(true);
       setSavedPosition(0);
       
       const downloadTimeout = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Download timeout')), 60000);
+        setTimeout(() => reject(new Error('Download timeout')), 45000);
       });
 
-      console.log("⏳ Esperando descarga completa...");
-      const downloadStart = Date.now();
-      
       const songPath = await Promise.race([
         window.musicAPI.getSongPath(track.id, track.title),
         downloadTimeout
       ]);
       
-      const downloadTime = Date.now() - downloadStart;
-
       if (!songPath) {
         throw new Error("No se pudo descargar la canción");
       }
-
-      console.log(`✅ DESCARGA COMPLETADA en ${downloadTime}ms`);
       
-      console.log("🎵 Cargando audio...");
       setIsLoadingAudio(true);
-      
-      const audioStart = Date.now();
       await musicService.loadAudioOnly(track);
-      const audioTime = Date.now() - audioStart;
-      
-      console.log(`🔊 AUDIO LISTO en ${audioTime}ms`);
       
       if (pendingTrackId === track.id) {
         setDuration(musicService.getDuration());
@@ -368,83 +422,43 @@ export function App() {
         setTimeout(() => {
           const finalPlayingState = musicService.isPlaying();
           setIsPlaying(finalPlayingState);
-          console.log(`🎶 ESTADO FINAL: Playing=${finalPlayingState}, Playlist: "${playlistName}" (${currentTrackIndex + 1}/${playlist.length})`);
-        }, 100);
+        }, 50);
       }
       
     } catch (error) {
-      console.error('❌ ERROR:', error);
+      console.error('Error:', error);
       setIsPlaying(false);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      if (errorMessage.includes('timeout')) {
-        console.error('⏱️ La descarga tomó más de 60 segundos. Inténtalo de nuevo.');
-      } else {
-        console.error('🚨 Error:', errorMessage);
-      }
-      
     } finally {
-      console.log("🏁 PROCESO COMPLETADO");
       setIsDownloading(false);
       setIsLoadingAudio(false);
       setPendingTrackId(null);
     }
-  };
+  }, [lastActionTime, isDownloading, pendingTrackId, searchResults, importedPlaylists]);
 
-  const handleSearch = async (query: string) => {
-    if (!query.trim()) return;
+  const handleSearch = useCallback((query: string) => {
+    debouncedSearch(query);
+  }, [debouncedSearch]);
 
-    setIsLoading(true);
-    
-    const displayQuery = query.replace(/ audio$/, '').trim();
-    setSearchQuery(displayQuery);
-    
-    try {
-      const results = await window.musicAPI.searchMusic(query);
-      setSearchResults(results);
-      // Actualizar playlist con los resultados de búsqueda
-      setPlaylist(results);
-      setIsPreloadingNext(false); // Reset preload flag when new search
-    } catch (error) {
-      console.error('Error en búsqueda:', error);
-      setSearchResults([]);
-      setPlaylist([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSeek = (time: number) => {
+  const handleSeek = useCallback((time: number) => {
     musicService.seek(time);
     setCurrentTime(time);
-  };
+  }, []);
 
-  const handleVolumeChange = (newVolume: number) => {
+  const handleVolumeChange = useCallback((newVolume: number) => {
     setVolume(newVolume);
     setIsMuted(newVolume === 0);
     musicService.setVolume(newVolume);
-  };
+  }, []);
 
-  const handleMuteToggle = (muted: boolean) => {
+  const handleMuteToggle = useCallback((muted: boolean) => {
     setIsMuted(muted);
     musicService.setVolume(muted ? 0 : volume);
-  };
+  }, [volume]);
 
-  const handleSkipForward = () => {
+  const handleSkipForward = useCallback(() => {
     const now = Date.now();
     
-    if (now - lastActionTime < 800) {
-      console.log("Skip demasiado rápido, ignorando...");
-      return;
-    }
-    
-    if (playlist.length === 0) {
-      console.log("❌ No hay playlist para skip forward");
-      return;
-    }
-    
-    if (pendingTrackId) {
-      console.log("Hay selección pendiente, esperando...");
+    if (now - lastActionTime < 500 || playlist.length === 0 || pendingTrackId) {
       return;
     }
     
@@ -453,85 +467,82 @@ export function App() {
     let nextIndex;
     if (isShuffle) {
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
-      if (availableIndexes.length === 0) {
-        nextIndex = currentTrackIndex;
-      } else {
-        nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
-      }
+      nextIndex = availableIndexes.length === 0 ? currentTrackIndex : 
+        availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
-      nextIndex = (currentTrackIndex + 1) % playlist.length;
+      // Lógica mejorada para repeat mode "all"
+      if (repeatMode === "all") {
+        nextIndex = (currentTrackIndex + 1) % playlist.length;
+      } else {
+        // Para "off", solo avanzar si no es la última canción
+        if (currentTrackIndex < playlist.length - 1) {
+          nextIndex = currentTrackIndex + 1;
+        } else {
+          // Última canción en modo "off" - parar
+          setIsPlaying(false);
+          return;
+        }
+      }
     }
     
     const nextTrack = playlist[nextIndex];
     if (nextTrack) {
-      console.log(`⏭️ SKIP FORWARD: De canción ${currentTrackIndex + 1} a ${nextIndex + 1} de ${playlist.length} en "${playlistName}"`);
-      console.log(`🎵 Reproduciendo: "${nextTrack.title}"`);
       handleTrackSelect(nextTrack, playlist, nextIndex);
-    } else {
-      console.error("❌ No se pudo encontrar la siguiente canción");
     }
-  };
+  }, [lastActionTime, playlist, pendingTrackId, isShuffle, currentTrackIndex, repeatMode, handleTrackSelect]);
 
-  const handleSkipBack = () => {
+  const handleSkipBack = useCallback(() => {
     const now = Date.now();
     
-    if (now - lastActionTime < 800) {
-      console.log("Skip back demasiado rápido, ignorando...");
-      return;
-    }
-    
-    if (pendingTrackId) {
-      console.log("Hay selección pendiente, esperando...");
+    if (now - lastActionTime < 500 || pendingTrackId) {
       return;
     }
 
     setLastActionTime(now);
 
-    // Si llevamos más de 3 segundos, reiniciar la canción actual
     if (currentTime > 3) {
-      console.log("⏪ Reiniciando canción actual");
       handleSeek(0);
       return;
     }
     
     if (playlist.length === 0) {
-      console.log("❌ No hay playlist para skip back");
       return;
     }
     
     let prevIndex;
     if (isShuffle) {
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
-      if (availableIndexes.length === 0) {
-        prevIndex = currentTrackIndex;
-      } else {
-        prevIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
-      }
+      prevIndex = availableIndexes.length === 0 ? currentTrackIndex :
+        availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
       prevIndex = currentTrackIndex === 0 ? playlist.length - 1 : currentTrackIndex - 1;
     }
     
     const prevTrack = playlist[prevIndex];
     if (prevTrack) {
-      console.log(`⏮️ SKIP BACK: De canción ${currentTrackIndex + 1} a ${prevIndex + 1} de ${playlist.length} en "${playlistName}"`);
-      console.log(`🎵 Reproduciendo: "${prevTrack.title}"`);
       handleTrackSelect(prevTrack, playlist, prevIndex);
-    } else {
-      console.error("❌ No se pudo encontrar la canción anterior");
     }
-  };
+  }, [lastActionTime, pendingTrackId, currentTime, playlist, isShuffle, currentTrackIndex, handleSeek, handleTrackSelect]);
 
-  const toggleDarkMode = () => {
+  // Otros handlers optimizados
+  const toggleDarkMode = useCallback(() => {
     setIsDarkMode(!isDarkMode);
-  };
+  }, [isDarkMode]);
 
-  const handleRepeatModeChange = (mode: "off" | "all" | "one") => {
+  const handleRepeatModeChange = useCallback((mode: "off" | "all" | "one") => {
     setRepeatMode(mode);
-  };
+  }, []);
 
-  const handleShuffleToggle = (shuffle: boolean) => {
+  const handleShuffleToggle = useCallback((shuffle: boolean) => {
     setIsShuffle(shuffle);
-  };
+  }, []);
+
+    // Memoizar props complejas
+    const playlistInfo = useMemo(() => ({
+      name: playlistName,
+      current: currentTrackIndex + 1,
+      total: playlist.length
+    }), [playlistName, currentTrackIndex, playlist.length]);
 
   return (
     <div className="flex h-screen w-full bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
@@ -543,12 +554,9 @@ export function App() {
       />
       
       <div className="flex flex-col flex-1 overflow-hidden">
-                <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
+        <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
           <MusicLibrary
-            onTrackSelect={(track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
-              console.log(`📱 App recibió selección: "${track.title}" con playlist de ${fromPlaylist?.length || 0} canciones, índice: ${trackIndex}`);
-              handleTrackSelect(track, fromPlaylist, trackIndex);
-            }}
+            onTrackSelect={handleTrackSelect}
             currentView={currentView}
             searchResults={searchResults}
             onSearch={handleSearch}
@@ -564,14 +572,9 @@ export function App() {
                 track={currentTrack}
                 isPlaying={isPlaying}
                 isDownloading={isDownloading}
-                playlistInfo={{
-                  name: playlistName,
-                  current: currentTrackIndex + 1,
-                  total: playlist.length
-                }}
+                playlistInfo={playlistInfo}
               />
               
-              {/* Indicador de precarga posicionado absolutamente en la esquina derecha */}
               {isPreloadingNext && !isDownloading && (
                 <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
                   <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -607,3 +610,4 @@ export function App() {
     </div>
   );
 }
+

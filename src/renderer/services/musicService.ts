@@ -233,12 +233,20 @@ class MusicService {
     }
   };
 
-  onTimeUpdate(callback: (time: number) => void): void {
+  onTimeUpdate(callback: (time: number) => void): (() => void) | void {
     this.timeUpdateCallback = callback;
+    // Retornar función de cleanup explícita
+    return () => {
+      this.timeUpdateCallback = null;
+    };
   }
 
-  onEnded(callback: () => void): void {
+  onEnded(callback: () => void): (() => void) | void {
     this.endedCallback = callback;
+    // Retornar función de cleanup explícita
+    return () => {
+      this.endedCallback = null;
+    };
   }
 
   getCurrentTrack(): Track | null {
@@ -350,8 +358,31 @@ class MusicService {
     }
   }
 
+  async repeatCurrentTrack(): Promise<void> {
+    if (!this.audio || !this.currentTrack) {
+      throw new Error("No hay audio o track para repetir");
+    }
+
+    try {
+      console.log("MusicService: Repitiendo canción actual");
+      
+      // Reiniciar posición
+      this.audio.currentTime = 0;
+      
+      // Si ya está pausado, reproducir
+      if (this.audio.paused) {
+        await this.audio.play();
+      }
+      
+      console.log("MusicService: Repetición iniciada");
+    } catch (error) {
+      console.error("MusicService: Error repitiendo canción:", error);
+      throw error;
+    }
+  }
+
+  // Método mejorado para verificar si está reproduciendo
   isPlaying(): boolean {
-    // REMOVER el logging excesivo que causa problemas
     return this.audio ? !this.audio.paused && !this.audio.ended : false;
   }
 
@@ -424,28 +455,6 @@ class MusicService {
       throw error;
     } finally {
       this.isLoadingTrack = false;
-    }
-  }
-
-  // Añadir método específico para repetir canción
-  async repeatCurrentTrack(): Promise<void> {
-    if (!this.audio || !this.currentTrack) {
-      console.warn("No hay audio o track para repetir");
-      return;
-    }
-
-    try {
-      // Resetear el audio al inicio
-      this.audio.currentTime = 0;
-      
-      // Intentar reproducir directamente
-      await this.audio.play();
-      console.log("MusicService: Repitiendo canción desde el inicio");
-    } catch (error) {
-      console.error("Error repitiendo canción, recargando:", error);
-      // Si falla, recargar completamente
-      const trackToRepeat = this.currentTrack;
-      await this.loadAudioOnly(trackToRepeat);
     }
   }
 }
