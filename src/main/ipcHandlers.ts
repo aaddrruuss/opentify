@@ -254,7 +254,13 @@ function loadSettings() {
 function saveSettings(settings: typeof defaultSettings) {
   ensureSettingsDirectoryExists();
   const settingsPath = getSettingsFilePath();
-  
+
+  // SOLUCIÓN: Si falta audioQuality, restaurar el valor actual o el default
+  if (!settings.audioQuality) {
+    const lastSettings = loadSettings();
+    settings.audioQuality = lastSettings.audioQuality || defaultSettings.audioQuality;
+  }
+
   try {
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
     console.log("Configuraciones guardadas:", settings);
@@ -1459,8 +1465,8 @@ export function setupIpcHandlers() {
   // NUEVOS: Handlers para gestión de almacenamiento
   ipcMain.handle("set-audio-quality", async (event, quality: 'low' | 'medium' | 'high') => {
     downloadManager.setAudioQuality(quality);
-    
-    // NUEVO: Guardar la calidad en las configuraciones
+
+    // Guardar la calidad en las configuraciones
     try {
       const currentSettings = loadSettings();
       currentSettings.audioQuality = quality;
@@ -1469,7 +1475,7 @@ export function setupIpcHandlers() {
     } catch (error) {
       console.error("Error guardando calidad de audio en configuración:", error);
     }
-    
+
     return true;
   });
 
@@ -1527,27 +1533,19 @@ export function setupIpcHandlers() {
       const playlistsSizeMB = (totalPlaylistsSize / (1024 * 1024)).toFixed(2);
       const totalSizeMB = ((totalSongsSize + totalPlaylistsSize) / (1024 * 1024)).toFixed(2);
       
+      // CORREGIDO: totalFiles = número de archivos mp3 en songsDir
       return {
-        songCount: songFiles.length,
-        songsSize: totalSongsSize,
-        songsSizeMB: parseFloat(songsSizeMB),
-        playlistCount,
-        playlistsSize: totalPlaylistsSize,
-        playlistsSizeMB: parseFloat(playlistsSizeMB),
-        totalSize: totalSongsSize + totalPlaylistsSize,
-        totalSizeMB: parseFloat(totalSizeMB)
+        totalFiles: songFiles.length,
+        totalSizeMB: parseFloat(songsSizeMB),
+        avgFileSizeMB: songFiles.length > 0 ? parseFloat((totalSongsSize / songFiles.length / 1024 / 1024).toFixed(2)) : 0,
+        // ...otros campos si los necesitas...
       };
     } catch (error) {
       console.error("Error obteniendo estadísticas de almacenamiento:", error);
       return {
-        songCount: 0,
-        songsSize: 0,
-        songsSizeMB: 0,
-        playlistCount: 0,
-        playlistsSize: 0,
-        playlistsSizeMB: 0,
-        totalSize: 0,
-        totalSizeMB: 0
+        totalFiles: 0,
+        totalSizeMB: 0,
+        avgFileSizeMB: 0
       };
     }
   }
