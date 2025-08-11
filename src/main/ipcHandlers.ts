@@ -26,6 +26,11 @@ const getSettingsFilePath = () => {
   return path.join(getSettingsDirectory(), "settings.json");
 };
 
+// Directorio para las playlists
+const getPlaylistsDirectory = () => {
+  return path.join(app.getPath("userData"), "adrus-music", "playlists");
+};
+
 const ytdlpPath = getBinaryPath();
 const songsDir = getSongsDirectory();
 
@@ -45,6 +50,24 @@ function ensureSongsDirExists() {
   if (!fs.existsSync(songsDir)) {
     fs.mkdirSync(songsDir, { recursive: true });
     console.log("Directorio de canciones creado:", songsDir);
+  }
+}
+
+// Función para asegurar que el directorio de configuraciones existe
+function ensureSettingsDirectoryExists() {
+  const settingsDir = getSettingsDirectory();
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true });
+    console.log("Directorio de configuraciones creado:", settingsDir);
+  }
+}
+
+// Función para asegurar que el directorio de playlists existe
+function ensurePlaylistsDirExists() {
+  const playlistsDir = getPlaylistsDirectory();
+  if (!fs.existsSync(playlistsDir)) {
+    fs.mkdirSync(playlistsDir, { recursive: true });
+    console.log("Directorio de playlists creado:", playlistsDir);
   }
 }
 
@@ -143,15 +166,6 @@ const defaultSettings = {
   lastPlayedPosition: 0,
   lastPlayedTime: null
 };
-
-// Función para asegurar que el directorio de configuraciones existe
-function ensureSettingsDirectoryExists() {
-  const settingsDir = getSettingsDirectory();
-  if (!fs.existsSync(settingsDir)) {
-    fs.mkdirSync(settingsDir, { recursive: true });
-    console.log("Directorio de configuraciones creado:", settingsDir);
-  }
-}
 
 // Función para cargar configuraciones
 function loadSettings() {
@@ -440,73 +454,219 @@ class DownloadManager {
 
 const downloadManager = new DownloadManager();
 
+// Función para guardar una playlist
+async function savePlaylist(playlistName: string, tracks: any[]): Promise<boolean> {
+  try {
+    ensurePlaylistsDirExists();
+    const playlistDir = getPlaylistPath(playlistName);
+    
+    // Crear directorio para la playlist
+    if (!fs.existsSync(playlistDir)) {
+      fs.mkdirSync(playlistDir, { recursive: true });
+    }
+    
+    // Guardar metadata de la playlist
+    const playlistData = {
+      name: playlistName,
+      tracks: tracks,
+      createdAt: new Date().toISOString(),
+      totalTracks: tracks.length
+    };
+    
+    const metadataPath = path.join(playlistDir, 'playlist.json');
+    fs.writeFileSync(metadataPath, JSON.stringify(playlistData, null, 2), 'utf8');
+    
+    console.log(`Playlist "${playlistName}" guardada en:`, playlistDir);
+    
+    // Iniciar descarga de las canciones en background
+    downloadPlaylistTracks(playlistName, tracks);
+    
+    return true;
+  } catch (error) {
+    console.error("Error guardando playlist:", error);
+    return false;
+  }
+}
+
+// Función para descargar las canciones de una playlist en background
+async function downloadPlaylistTracks(playlistName: string, tracks: any[]) {
+  console.log(`📥 Iniciando descarga de ${tracks.length} canciones para "${playlistName}"`);
+  
+  for (let i = 0; i < tracks.length; i++) {
+    const track = tracks[i];
+    try {
+      console.log(`📥 Descargando ${i + 1}/${tracks.length}: ${track.title}`);
+      await downloadManager.queueDownload(track.id, track.title, true); // preload = true
+      
+      // Pequeño delay entre descargas
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      console.error(`Error descargando ${track.title}:`, error);
+    }
+  }
+  
+  console.log(`✅ Descarga completada para playlist "${playlistName}"`);
+}
+
+// Función para obtener la ruta de una playlist
+function getPlaylistPath(playlistName: string): string {
+  const sanitizedName = sanitizeFileName(playlistName);
+  return path.join(getPlaylistsDirectory(), sanitizedName);
+}
+
+// Función para cargar una playlist
+async function loadPlaylist(playlistName: string): Promise<any[]> {
+  try {
+    const playlistDir = getPlaylistPath(playlistName);
+    const metadataPath = path.join(playlistDir, 'playlist.json');
+    
+    if (!fs.existsSync(metadataPath)) {
+      console.log(`Playlist "${playlistName}" no encontrada`);
+      return [];
+    }
+    
+    const playlistData = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    return playlistData.tracks || [];
+  } catch (error) {
+    console.error("Error cargando playlist:", error);
+    return [];
+  }
+}
+
+// Función para obtener lista de playlists
+async function getPlaylists(): Promise<string[]> {
+  try {
+    ensurePlaylistsDirExists();
+    const playlistsDir = getPlaylistsDirectory();
+    const dirs = fs.readdirSync(playlistsDir, { withFileTypes: true });
+    
+    const playlists = [];
+    for (const dir of dirs) {
+      if (dir.isDirectory()) {
+        const metadataPath = path.join(playlistsDir, dir.name, 'playlist.json');
+        if (fs.existsSync(metadataPath)) {
+          try {
+            const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+            playlists.push(metadata.name || dir.name);
+          } catch (error) {
+            console.error(`Error leyendo metadata de ${dir.name}:`, error);
+          }
+        }
+      }
+    }
+    
+    return playlists;
+  } catch (error) {
+    console.error("Error obteniendo playlists:", error);
+    return [];
+  }
+}
+
+// Función para eliminar una playlist
+async function deletePlaylist(playlistName: string): Promise<boolean> {
+  try {
+    const playlistDir = getPlaylistPath(playlistName);
+    
+    if (fs.existsSync(playlistDir)) {
+      // Eliminar directorio y todo su contenido
+      fs.rmSync(playlistDir, { recursive: true, force: true });
+      console.log(`Playlist "${playlistName}" eliminada`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("Error eliminando playlist:", error);
+    return false;
+  }
+}
+
 export function setupIpcHandlers() {
   // Limpiar archivos huérfanos al iniciar
   downloadManager.cleanupOrphanedFiles();
 
+  // Cache simple para búsquedas recientes
+  const searchCache = new Map<string, any[]>();
+  const maxCacheSize = 50;
+  const cacheExpiration = 5 * 60 * 1000; // 5 minutos
+
   ipcMain.handle("search-music", async (event, query: string) => {
     try {
-      const videos = await YouTube.search(query, {
-        limit: 50, // Buscar más resultados para poder filtrar
+      // Verificar cache primero
+      const cacheKey = query.toLowerCase().trim();
+      const cachedResult = searchCache.get(cacheKey);
+      
+      if (cachedResult) {
+        console.log(`Cache hit para: "${query}"`);
+        return cachedResult;
+      }
+
+      console.log(`Buscando en YouTube: "${query}"`);
+      
+      // Usar timeout más robusto para búsquedas
+      const searchPromise = YouTube.search(query, {
+        limit: 30, // Reducir límite para búsquedas más rápidas
         type: "video",
       });
+      
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Search timeout')), 10000) // 10 segundos timeout
+      );
+      
+      const videos = await Promise.race([searchPromise, timeoutPromise]);
 
-      // Filtrar videos por duración (menos de 15 minutos = 900 segundos)
+      // Filtrar y procesar resultados
       const filteredVideos = videos.filter((video) => {
         const durationInMilliseconds = video.duration;
         
-        // Si no hay duración disponible, incluir el video
         if (!durationInMilliseconds || durationInMilliseconds === 0) {
-          console.log(`Video sin duración específica incluido: "${video.title}"`);
           return true;
         }
         
-        // Convertir millisegundos a segundos
         const durationInSeconds = Math.floor(durationInMilliseconds / 1000);
-        
-        // Filtrar videos que duren más de 15 minutos (900 segundos)
-        if (durationInSeconds > 900) {
-          console.log(`Video filtrado por duración: "${video.title}" - ${video.durationFormatted} (${durationInSeconds}s)`);
-          return false;
-        }
-        
-        console.log(`Video incluido: "${video.title}" - ${video.durationFormatted} (${durationInSeconds}s)`);
-        return true;
-      }).slice(0, 20); // Limitar a 20 resultados después del filtrado
+        return durationInSeconds <= 900; // 15 minutos max
+      }).slice(0, 20);
 
-      console.log(`Búsqueda: "${query}" - ${videos.length} resultados encontrados, ${filteredVideos.length} después del filtrado por duración`);
+      console.log(`Búsqueda: "${query}" - ${videos.length} encontrados, ${filteredVideos.length} después del filtrado`);
 
-      return filteredVideos.map((video) => {
-        // Construir URLs de thumbnail más confiables
+      const results = filteredVideos.map((video) => {
         const videoId = video.id!;
         const thumbnailOptions = [
-          `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
           `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
           `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
           `https://img.youtube.com/vi/${videoId}/default.jpg`
         ];
 
-        const result = {
+        return {
           id: videoId,
           title: video.title!,
           artist: video.channel?.name || "Unknown Artist",
           duration: video.durationFormatted || "0:00",
-          thumbnail: thumbnailOptions[1], // Usar hqdefault como predeterminado
-          cover: thumbnailOptions[1] // También asignar a cover para compatibilidad
+          thumbnail: thumbnailOptions[0],
+          cover: thumbnailOptions[0]
         };
-
-        console.log("Canción procesada:", {
-          id: result.id,
-          title: result.title,
-          duration: result.duration,
-          artist: result.artist,
-          cached: isSongCached(result.id) !== null // Indicar si está en cache
-        });
-
-        return result;
       });
+
+      // Guardar en cache
+      if (searchCache.size >= maxCacheSize) {
+        // Remover el más antiguo
+        const firstKey = searchCache.keys().next().value;
+        if (firstKey) {
+          searchCache.delete(firstKey);
+        }
+      }
+      searchCache.set(cacheKey, results);
+
+      // Limpiar cache expirado después de un tiempo
+      setTimeout(() => {
+        searchCache.delete(cacheKey);
+      }, cacheExpiration);
+
+      return results;
     } catch (error) {
       console.error("Search error:", error);
+      
+      // Retornar array vacío en lugar de lanzar error para no romper el proceso
       return [];
     }
   });
@@ -582,5 +742,22 @@ export function setupIpcHandlers() {
       console.error("Error saving settings:", error);
       return false;
     }
+  });
+
+  // Handlers para playlists
+  ipcMain.handle("save-playlist", async (event, playlistName: string, tracks: any[]) => {
+    return await savePlaylist(playlistName, tracks);
+  });
+
+  ipcMain.handle("load-playlist", async (event, playlistName: string) => {
+    return await loadPlaylist(playlistName);
+  });
+
+  ipcMain.handle("get-playlists", async () => {
+    return await getPlaylists();
+  });
+
+  ipcMain.handle("delete-playlist", async (event, playlistName: string) => {
+    return await deletePlaylist(playlistName);
   });
 }

@@ -7,9 +7,10 @@ interface TrackListProps {
   onTrackSelect: (track: Track) => void;
   isDownloading?: boolean;
   currentTrackId?: string;
+  compact?: boolean;
 }
 
-export function TrackList({ tracks, onTrackSelect, isDownloading = false, currentTrackId }: TrackListProps) {
+export function TrackList({ tracks, onTrackSelect, isDownloading = false, currentTrackId, compact = false }: TrackListProps) {
   const getImageUrl = (track: Track) => {
     console.log("Track data:", track); // Debug log
     
@@ -57,6 +58,32 @@ export function TrackList({ tracks, onTrackSelect, isDownloading = false, curren
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     console.log("Image loaded successfully:", e.currentTarget.src); // Debug log
   };
+
+  if (compact) {
+    return (
+      <div className="space-y-1">
+        {tracks.map((track) => (
+          <div
+            key={track.id}
+            onClick={() => onTrackSelect(track)}
+            className="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+          >
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
+                {track.title}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {track.artist}
+              </p>
+            </div>
+            <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+              {track.duration}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm border dark:border-gray-700">

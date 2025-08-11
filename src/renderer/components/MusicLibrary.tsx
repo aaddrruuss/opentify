@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { TrackList } from "./TrackList";
+import { ImportPlaylist } from "./ImportPlaylist";
 import { Track } from "../types/index";
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, Upload } from "lucide-react";
 
 interface MusicLibraryProps {
   onTrackSelect: (track: Track) => void;
@@ -21,6 +22,30 @@ export function MusicLibrary({
   searchQuery,
 }: MusicLibraryProps) {
   const [inputValue, setInputValue] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importedPlaylists, setImportedPlaylists] = useState<{[key: string]: Track[]}>({});
+
+  // Cargar playlists guardadas al inicializar
+  useEffect(() => {
+    const loadSavedPlaylists = async () => {
+      try {
+        const playlistNames = await window.playlistAPI.getPlaylists();
+        const playlists: {[key: string]: Track[]} = {};
+        
+        for (const name of playlistNames) {
+          const tracks = await window.playlistAPI.loadPlaylist(name);
+          playlists[name] = tracks;
+        }
+        
+        setImportedPlaylists(playlists);
+        console.log(`📚 Cargadas ${playlistNames.length} playlists guardadas`);
+      } catch (error) {
+        console.error("Error cargando playlists guardadas:", error);
+      }
+    };
+    
+    loadSavedPlaylists();
+  }, []);
 
   // Datos de ejemplo para la vista Home
   const recentlyPlayed: Track[] = [
@@ -45,6 +70,27 @@ export function MusicLibrary({
       }
       
       onSearch(searchTerm);
+    }
+  };
+
+  const handleImportComplete = async (tracks: Track[], playlistName: string) => {
+    setImportedPlaylists(prev => ({
+      ...prev,
+      [playlistName]: tracks
+    }));
+    setShowImportModal(false);
+    
+    console.log(`Playlist "${playlistName}" importada con ${tracks.length} canciones`);
+  };
+
+  const searchForImport = async (query: string): Promise<Track[]> => {
+    try {
+      // Hacer búsqueda directa sin modificar la query
+      const results = await window.musicAPI.searchMusic(query);
+      return results;
+    } catch (error) {
+      console.error('Error en búsqueda para importación:', error);
+      return [];
     }
   };
 
@@ -178,17 +224,93 @@ export function MusicLibrary({
         return (
           <section>
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Playlists</h2>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-md shadow-sm border dark:border-gray-700">
-              <p className="text-gray-600 dark:text-gray-300 mb-4">
-                Las playlists estarán disponibles próximamente.
-              </p>
-              <button
-                className="p-3 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors opacity-50 cursor-not-allowed"
-                disabled
-              >
-                Crear Nueva Playlist
-              </button>
+            
+            <div className="mb-6">
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-md shadow-sm border dark:border-gray-700">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+                      Gestionar Playlists
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-300 text-sm">
+                      Importa tus playlists de Spotify usando archivos CSV exportados desde tu cuenta.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#1DB954] text-white rounded-md hover:bg-green-600 transition-colors"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Importar de Spotify
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors opacity-50 cursor-not-allowed"
+                    disabled
+                    title="Próximamente"
+                  >
+                    Crear Nueva Playlist
+                  </button>
+                </div>
+              </div>
             </div>
+
+            {/* Imported Playlists */}
+            {Object.keys(importedPlaylists).length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  Playlists Importadas
+                </h3>
+                {Object.entries(importedPlaylists).map(([name, tracks]) => (
+                  <div key={name} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700">
+                    <div className="p-4 border-b dark:border-gray-700">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                            {name}
+                          </h4>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            {tracks.length} canciones
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            // Play first track from playlist
+                            if (tracks.length > 0) {
+                              onTrackSelect(tracks[0]);
+                            }
+                          }}
+                          className="px-3 py-1 text-sm bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
+                        >
+                          Reproducir
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      <TrackList
+                        tracks={tracks}
+                        onTrackSelect={onTrackSelect}
+                        compact
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {Object.keys(importedPlaylists).length === 0 && (
+              <div className="text-center py-8">
+                <Upload className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 mb-2">
+                  No tienes playlists importadas
+                </p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">
+                  Importa una playlist de Spotify para comenzar
+                </p>
+              </div>
+            )}
           </section>
         );
 
@@ -209,5 +331,18 @@ export function MusicLibrary({
     }
   };
 
-  return <div>{renderContent()}</div>;
+  return (
+    <div>
+      {renderContent()}
+      
+      {/* Import Modal */}
+      {showImportModal && (
+        <ImportPlaylist
+          onImportComplete={handleImportComplete}
+          onCancel={() => setShowImportModal(false)}
+          onSearch={searchForImport}
+        />
+      )}
+    </div>
+  );
 }

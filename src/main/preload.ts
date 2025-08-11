@@ -22,3 +22,12 @@ contextBridge.exposeInMainWorld("settingsAPI", {
   loadSettings: () => ipcRenderer.invoke("load-settings"),
   saveSettings: (settings: any) => ipcRenderer.invoke("save-settings", settings),
 });
+
+const playlistAPI = {
+  savePlaylist: (name: string, tracks: any[]) => ipcRenderer.invoke('save-playlist', name, tracks),
+  loadPlaylist: (name: string) => ipcRenderer.invoke('load-playlist', name),
+  getPlaylists: () => ipcRenderer.invoke('get-playlists'),
+  deletePlaylist: (name: string) => ipcRenderer.invoke('delete-playlist', name),
+};
+
+contextBridge.exposeInMainWorld('playlistAPI', playlistAPI);

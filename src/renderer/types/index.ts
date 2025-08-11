@@ -30,9 +30,17 @@ export interface SettingsAPI {
   saveSettings: (settings: Settings) => Promise<boolean>;
 }
 
+export interface PlaylistAPI {
+  savePlaylist: (name: string, tracks: Track[]) => Promise<boolean>;
+  loadPlaylist: (name: string) => Promise<Track[]>;
+  getPlaylists: () => Promise<string[]>;
+  deletePlaylist: (name: string) => Promise<boolean>;
+}
+
 declare global {
   interface Window {
     musicAPI: MusicAPI;
     settingsAPI: SettingsAPI;
+    playlistAPI: PlaylistAPI;
   }
 }
