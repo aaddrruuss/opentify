@@ -5,9 +5,8 @@ import {
   LibraryIcon,
   PlusCircleIcon,
   HeartIcon,
-  MoonIcon,
-  SunIcon,
   Download,
+  Settings as SettingsIcon,
 } from 'lucide-react'
 import { ImportManagerPopup } from './ImportManagerPopup';
 
@@ -15,14 +14,14 @@ interface SidebarProps {
   currentView: string;
   setCurrentView: (view: string) => void;
   isDarkMode: boolean;
-  toggleDarkMode: () => void;
+  onToggleDarkMode: (darkMode: boolean) => void;
 }
 
 export function Sidebar({ 
   currentView, 
-  setCurrentView, 
-  isDarkMode, 
-  toggleDarkMode 
+  setCurrentView,
+  isDarkMode,
+  onToggleDarkMode
 }: SidebarProps) {
   const menuItems = [
     {
@@ -107,19 +106,6 @@ export function Sidebar({
           })}
         </ul>
       </nav>
-      <div className="p-6 border-t border-gray-200 dark:border-gray-700 space-y-3">
-        <button 
-          onClick={toggleDarkMode}
-          className="flex items-center w-full text-sm text-gray-600 dark:text-gray-300 hover:text-[#2196F3] dark:hover:text-[#2196F3] transition-colors"
-          title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-        >
-          {isDarkMode ? <SunIcon className="w-4 h-4 mr-2" /> : <MoonIcon className="w-4 h-4 mr-2" />}
-          {isDarkMode ? "Light Mode" : "Dark Mode"}
-        </button>
-        <button className="text-sm text-gray-600 dark:text-gray-300 hover:text-[#2196F3] dark:hover:text-[#2196F3] transition-colors">
-          Install App
-        </button>
-      </div>
 
       {/* Import Manager Button - Solo mostrar si hay importaciones activas */}
       {activeImports > 0 && (
@@ -136,6 +122,17 @@ export function Sidebar({
           </button>
         </div>
       )}
+
+      {/* Settings Button */}
+      <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+        <button 
+          onClick={() => setCurrentView('settings')}
+          className={`flex items-center w-full text-sm transition-colors ${currentView === 'settings' ? 'text-[#2196F3] font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-[#2196F3] dark:hover:text-[#2196F3]'}`}
+        >
+          <SettingsIcon className="w-4 h-4 mr-2" />
+          Settings
+        </button>
+      </div>
       
       {showImportManager && (
         <ImportManagerPopup 

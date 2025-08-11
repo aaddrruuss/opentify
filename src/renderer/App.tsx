@@ -56,7 +56,7 @@ export function App() {
   const [lastActionTime, setLastActionTime] = useState(0);
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   const [importedPlaylists, setImportedPlaylists] = useState<Record<string, Track[]>>({});
-
+  
   // Funciones memoizadas para mejor rendimiento
   const throttledTimeUpdate = useMemo(
     () => throttle((time: number) => {
@@ -564,10 +564,10 @@ export function App() {
     }
   }, [lastActionTime, pendingTrackId, currentTime, playlist, isShuffle, currentTrackIndex, handleSeek, handleTrackSelect]);
 
-  // Otros handlers optimizados
-  const toggleDarkMode = useCallback(() => {
-    setIsDarkMode(!isDarkMode);
-  }, [isDarkMode]);
+  // NUEVO: Handler para toggle dark mode desde settings
+  const toggleDarkMode = useCallback((darkMode: boolean) => {
+    setIsDarkMode(darkMode);
+  }, []);
 
   const handleRepeatModeChange = useCallback((mode: "off" | "all" | "one") => {
     setRepeatMode(mode);
@@ -590,7 +590,7 @@ export function App() {
         currentView={currentView} 
         setCurrentView={setCurrentView}
         isDarkMode={isDarkMode}
-        toggleDarkMode={toggleDarkMode}
+        onToggleDarkMode={toggleDarkMode}
       />
       
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -602,6 +602,8 @@ export function App() {
             onSearch={handleSearch}
             isLoading={isLoading}
             searchQuery={searchQuery}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={toggleDarkMode}
           />
         </main>
         

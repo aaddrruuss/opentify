@@ -4,6 +4,7 @@ import { ImportPlaylist } from "./ImportPlaylist";
 import { PlaylistCard } from "./PlaylistCard";
 import { Track } from "../types/index";
 import { SearchIcon, Upload, Music } from "lucide-react";
+import { SettingsView } from './SettingsView';
 
 interface MusicLibraryProps {
   onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
@@ -21,7 +22,12 @@ export const MusicLibrary = memo(({
   onSearch,
   isLoading,
   searchQuery,
-}: MusicLibraryProps) => {
+  isDarkMode,
+  onToggleDarkMode,
+}: MusicLibraryProps & { 
+  isDarkMode: boolean; 
+  onToggleDarkMode: (darkMode: boolean) => void; 
+}) => {
   const [inputValue, setInputValue] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
   const [importedPlaylists, setImportedPlaylists] = useState<{[key: string]: Track[]}>({});
@@ -349,6 +355,16 @@ export const MusicLibrary = memo(({
       </section>
     );
   }, [currentView, importedPlaylists, playlistsLoaded, onTrackSelect, expandedPlaylists, togglePlaylistExpansion, handlePlaylistNameChange]);
+
+  // NUEVO: Renderizar vista de configuraciones
+  if (currentView === "settings") {
+    return (
+      <SettingsView 
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={onToggleDarkMode}
+      />
+    );
+  }
 
   const renderContent = () => {
     switch (currentView) {

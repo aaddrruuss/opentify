@@ -304,6 +304,53 @@ body {
   pointer-events: none !important;
 }
 
+/* Estilos para el modal de configuraciones */
+.settings-modal-enter {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.settings-modal-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.settings-modal-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.settings-modal-exit-active {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Estilos mejorados para el switch de dark mode */
+.dark-mode-switch {
+  transition: all 0.3s ease;
+}
+
+.dark-mode-switch:focus {
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+}
+
+/* Animación suave para el toggle del switch */
+.switch-thumb {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover effect para el botón de configuración */
+.settings-button:hover {
+  transform: translateY(-1px);
+}
+
+/* Mejoras generales para los modales */
+.modal-backdrop {
+  backdrop-filter: blur(4px);
+}
+
 /* Mejorar la experiencia de importación de playlists */
 .import-progress {
   transition: all 0.3s ease;
