@@ -225,7 +225,7 @@ class BackgroundImportManager {
     console.log("✅ Procesamiento de cola completado");
   }
 
-  // Procesar una tarea individual - CON MANEJO DE RESTRICCIÓN DE EDAD
+  // Procesar una tarea individual - CORREGIDO SIN VERIFICACIÓN PROBLEMÁTICA
   private async processTask(task: ImportTask) {
     console.log(`🎵 Procesando tarea: ${task.playlistName} (${task.processedTracks}/${task.totalTracks})`);
     
@@ -280,30 +280,16 @@ class BackgroundImportManager {
         const bestMatch = this.findBestMatch(searchResults, trackData.durationMs);
         
         if (bestMatch) {
-          // **NUEVO: Verificar que el video se puede descargar**
-          try {
-            await this.verifyVideoAvailability(bestMatch.id, bestMatch.title);
-            
-            trackData.matchedTrack = {
-              ...bestMatch,
-              title: trackData.trackName,
-              artist: trackData.artistName
-            };
-            trackData.status = 'found';
-            task.foundTracks++;
-            console.log(`✅ [${i + 1}/${task.totalTracks}] Encontrada: ${trackData.trackName}`);
-          } catch (verifyError) {
-            const errorMsg = String(verifyError);
-            
-            if (errorMsg.includes('AGE_RESTRICTED')) {
-              console.warn(`🔞 [${i + 1}/${task.totalTracks}] Restricción de edad - ELIMINANDO: ${trackData.trackName}`);
-              trackData.status = 'not_found';
-              // La canción será omitida de la playlist final
-            } else {
-              console.warn(`⚠️ [${i + 1}/${task.totalTracks}] Error verificando video: ${errorMsg}`);
-              trackData.status = 'not_found';
-            }
-          }
+          // **SIMPLIFICADO: Solo marcar como encontrada sin verificación previa**
+          // Las restricciones de edad se manejarán durante la descarga real
+          trackData.matchedTrack = {
+            ...bestMatch,
+            title: trackData.trackName,
+            artist: trackData.artistName
+          };
+          trackData.status = 'found';
+          task.foundTracks++;
+          console.log(`✅ [${i + 1}/${task.totalTracks}] Encontrada: ${trackData.trackName}`);
         } else {
           trackData.status = 'not_found';
           console.log(`⚠️ [${i + 1}/${task.totalTracks}] No encontrada: ${trackData.trackName}`);
@@ -330,7 +316,7 @@ class BackgroundImportManager {
     task.completedAt = Date.now();
     task.currentTrack = '';
     
-    // Guardar playlist completa (las canciones con restricción de edad serán omitidas automáticamente)
+    // Guardar playlist completa (las canciones con restricción de edad se eliminarán durante la reproducción)
     await this.saveCompletePlaylist(task);
     
     this.saveTasks();
@@ -340,30 +326,6 @@ class BackgroundImportManager {
     this.showCompletionNotification(task);
     
     console.log(`🎉 Tarea completada: ${task.playlistName} (${task.foundTracks}/${task.totalTracks} encontradas)`);
-  }
-
-  // **NUEVA FUNCIÓN: Verificar disponibilidad del video**
-  private async verifyVideoAvailability(videoId: string, title: string): Promise<void> {
-    try {
-      // Intentar una descarga de prueba muy rápida para verificar disponibilidad
-      const testResult = await window.musicAPI?.getSongPath(videoId, title, true);
-      
-      if (!testResult) {
-        throw new Error("Video no disponible");
-      }
-      
-      console.log(`✓ Video verificado: ${title}`);
-    } catch (error) {
-      const errorMsg = String(error);
-      
-      // Si es restricción de edad, propagar el error específico
-      if (errorMsg.includes('AGE_RESTRICTED')) {
-        throw new Error(`AGE_RESTRICTED: ${title}`);
-      }
-      
-      // Para otros errores, también lanzar
-      throw error;
-    }
   }
 
   // Construir query de búsqueda optimizada

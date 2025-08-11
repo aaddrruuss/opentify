@@ -303,3 +303,21 @@ body {
 .modal-track-item * {
   pointer-events: none !important;
 }
+
+/* Mejorar la experiencia de importación de playlists */
+.import-progress {
+  transition: all 0.3s ease;
+}
+
+.import-success {
+  animation: pulse 1s ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
