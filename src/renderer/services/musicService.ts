@@ -205,8 +205,14 @@ class MusicService {
   };
 
   private handleEnded = () => {
+    console.log("MusicService: Audio ended event fired");
     if (this.endedCallback) {
-      this.endedCallback();
+      // Pequeño delay para asegurar que el evento se procese correctamente
+      setTimeout(() => {
+        if (this.endedCallback) {
+          this.endedCallback();
+        }
+      }, 100);
     }
   };
 
@@ -383,7 +389,18 @@ class MusicService {
 
   // Método mejorado para verificar si está reproduciendo
   isPlaying(): boolean {
-    return this.audio ? !this.audio.paused && !this.audio.ended : false;
+    if (!this.audio) return false;
+    
+    return !this.audio.paused && 
+           !this.audio.ended && 
+           this.audio.currentTime > 0 &&
+           this.audio.readyState > 2;
+  }
+
+  // Nuevo método para verificar si la canción terminó
+  hasEnded(): boolean {
+    if (!this.audio) return false;
+    return this.audio.ended || (this.audio.currentTime >= this.audio.duration && this.audio.duration > 0);
   }
 
   async loadAudioOnly(track: Track): Promise<void> {

@@ -302,23 +302,23 @@ class DownloadManager {
       // Argumentos optimizados para menor uso de recursos
       const args = [
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "bestaudio[ext=m4a][filesize<50M]/bestaudio/best", // Límite de tamaño
+        "-f", "bestaudio[ext=m4a][filesize<50M]/bestaudio/best",
         "-o", tempPath,
         "--extract-audio",
         "--audio-format", "mp3",
-        "--audio-quality", preload ? "9" : "6", // Mejor compresión
+        "--audio-quality", preload ? "9" : "6",
         "--no-playlist",
         "--no-warnings",
         "--concurrent-fragments", "1",
-        "--retries", "1", // Menos reintentos
+        "--retries", "1",
         "--fragment-retries", "1",
         "--no-continue",
         "--no-part",
-        "--socket-timeout", "20", // Timeout más corto
+        "--socket-timeout", "20",
         "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "--sleep-interval", "0.5", // Menos pausa
+        "--sleep-interval", "0.5",
         "--max-sleep-interval", "2",
-        "--buffer-size", "16K" // Buffer más pequeño
+        "--buffer-size", "16K"
       ];
 
       if (process.platform === "win32") {
@@ -358,8 +358,26 @@ class DownloadManager {
         const stats = fs.statSync(tempMp3Path);
         const fileSizeKB = stats.size / 1024;
         
+        // NUEVA VALIDACIÓN: Verificar duración si tenemos el título
+        if (title) {
+          // Intentar extraer duración estimada del contexto si está disponible
+          // Por ahora, validar principalmente por tamaño
+          const isValid = await validateDownloadedFile(tempMp3Path, 0); // Sin duración esperada por ahora
+          
+          if (!isValid) {
+            console.warn(`❌ Archivo no válido para ${title}, eliminando`);
+            try {
+              fs.unlinkSync(tempMp3Path);
+            } catch (err) {
+              console.warn("Error eliminando archivo inválido:", err);
+            }
+            throw new Error("Archivo descargado no válido");
+          }
+        }
+        
         if (stats.size < 30 * 1024) { // 30KB mínimo
-          console.warn(`⚠️ Archivo muy pequeño (${fileSizeKB.toFixed(2)}KB)`);
+          console.warn(`⚠️ Archivo muy pequeño (${fileSizeKB.toFixed(2)}KB), posible error`);
+          // No lanzar error automáticamente, pero advertir
         }
         
         if (fs.existsSync(finalSongPath)) {
@@ -368,11 +386,29 @@ class DownloadManager {
           } catch (err) {
             // Ignorar
           }
-          return finalSongPath;
+          
+          // Validar el archivo final existente
+          const finalIsValid = await validateDownloadedFile(finalSongPath, 0);
+          if (finalIsValid) {
+            return finalSongPath;
+          } else {
+            console.warn("Archivo final existente no es válido, reemplazando");
+            try {
+              fs.unlinkSync(finalSongPath);
+            } catch (err) {
+              console.warn("Error eliminando archivo final inválido:", err);
+            }
+          }
         }
 
         try {
           fs.renameSync(tempMp3Path, finalSongPath);
+          
+          // Validación final
+          const finalValidation = await validateDownloadedFile(finalSongPath, 0);
+          if (!finalValidation) {
+            console.warn("⚠️ Archivo final no pasó validación, pero se mantiene");
+          }
           
           if (!preload) {
             console.log(`✅ Descarga finalizada: ${path.basename(finalSongPath)} (${fileSizeKB.toFixed(2)}KB)`);
@@ -810,6 +846,98 @@ function getMimeType(extension: string): string {
     'webp': 'image/webp'
   };
   return mimeTypes[extension.toLowerCase()] || 'image/jpeg';
+}
+
+// Función para obtener la duración de un archivo de audio
+async function getAudioDuration(filePath: string): Promise<number> {
+  try {
+    // Usar ffprobe para obtener la duración exacta del archivo
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execAsync = util.promisify(exec);
+    
+    // Verificar si ffprobe está disponible
+    try {
+      await execAsync('ffprobe -version');
+    } catch (error) {
+      console.warn("ffprobe no disponible, usando estimación básica");
+      return -1; // Indicar que no se puede verificar
+    }
+    
+    const command = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`;
+    const { stdout } = await execAsync(command);
+    const duration = parseFloat(stdout.trim());
+    
+    return isNaN(duration) ? -1 : duration;
+  } catch (error) {
+    console.warn("Error obteniendo duración del audio:", error);
+    return -1;
+  }
+}
+
+// Función para validar si un archivo está completamente descargado
+async function validateDownloadedFile(filePath: string, expectedDurationMs: number): Promise<boolean> {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return false;
+    }
+    
+    const stats = fs.statSync(filePath);
+    
+    // Verificar tamaño mínimo (30KB)
+    if (stats.size < 30 * 1024) {
+      console.warn(`⚠️ Archivo muy pequeño: ${(stats.size / 1024).toFixed(2)}KB`);
+      return false;
+    }
+    
+    // Si no tenemos duración esperada, solo verificar tamaño
+    if (expectedDurationMs <= 0) {
+      return true;
+    }
+    
+    // Obtener duración real del archivo
+    const actualDurationSeconds = await getAudioDuration(filePath);
+    
+    if (actualDurationSeconds < 0) {
+      // Si no se puede obtener la duración, aceptar si el tamaño es razonable
+      console.warn("⚠️ No se pudo verificar duración, usando validación por tamaño");
+      return stats.size > 100 * 1024; // Al menos 100KB
+    }
+    
+    const expectedDurationSeconds = expectedDurationMs / 1000;
+    const durationDifference = Math.abs(actualDurationSeconds - expectedDurationSeconds);
+    
+    console.log(`⏱️ Duración esperada: ${expectedDurationSeconds}s, real: ${actualDurationSeconds}s, diferencia: ${durationDifference}s`);
+    
+    // Margen de 3 segundos como especificaste
+    if (durationDifference <= 3) {
+      console.log("✅ Archivo validado correctamente");
+      return true;
+    } else {
+      console.warn(`⚠️ Duración no coincide: diferencia de ${durationDifference}s`);
+      return false;
+    }
+    
+  } catch (error) {
+    console.error("Error validando archivo descargado:", error);
+    return false;
+  }
+}
+
+// Función para convertir duración de YouTube (formato string) a milisegundos
+function parseYoutubeDuration(durationString: string): number {
+  if (!durationString) return 0;
+  
+  const parts = durationString.split(':').map(Number);
+  if (parts.length === 2) {
+    // Formato MM:SS
+    return (parts[0] * 60 + parts[1]) * 1000;
+  } else if (parts.length === 3) {
+    // Formato HH:MM:SS
+    return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+  }
+  
+  return 0;
 }
 
 export function setupIpcHandlers() {

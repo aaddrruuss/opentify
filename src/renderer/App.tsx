@@ -180,177 +180,6 @@ export function App() {
     }
   }, [isDarkMode]);
 
-  const handleSongEnded = useCallback(() => {
-    if (repeatMode === "one") {
-      if (currentTrack) {
-        musicService.repeatCurrentTrack().then(() => {
-          setIsPlaying(true);
-          setCurrentTime(0);
-        }).catch(error => {
-          console.error("Error repitiendo canción:", error);
-          handleTrackSelect(currentTrack);
-        });
-      }
-    } else if (repeatMode === "all" || repeatMode === "off") {
-      // Para "all" y "off", ir a la siguiente canción
-      if (playlist.length > 0) {
-        handleSkipForward();
-      } else {
-        // Si no hay playlist, simplemente parar
-        setIsPlaying(false);
-      }
-    } else {
-      // Fallback: parar reproducción
-      setIsPlaying(false);
-    }
-  }, [repeatMode, currentTrack, playlist.length]);
-
-  // Music service setup (optimizado)
-  useEffect(() => {
-    let mounted = true;
-    let timeUpdateCleanup: (() => void) | void;
-    let endedCleanup: (() => void) | void;
-    
-    // Setup listeners con manejo seguro de tipos
-    try {
-      timeUpdateCleanup = musicService.onTimeUpdate(throttledTimeUpdate);
-    } catch (error) {
-      console.error("Error setting up time update listener:", error);
-    }
-
-    try {
-      endedCleanup = musicService.onEnded(() => {
-        if (mounted) {
-          setIsPlaying(false);
-          handleSongEnded();
-        }
-      });
-    } catch (error) {
-      console.error("Error setting up ended listener:", error);
-    }
-
-    if (settingsLoaded) {
-      musicService.setVolume(isMuted ? 0 : volume);
-      
-      if (isRestoringTrack && currentTrack) {
-        const restoreTrack = async () => {
-          if (!mounted) return;
-          
-          try {
-            setIsDownloading(true);
-            await musicService.loadTrackForRestore(currentTrack);
-            
-            setTimeout(() => {
-              if (!mounted) return;
-              
-              if (savedPosition > 0) {
-                musicService.seek(savedPosition);
-                setCurrentTime(savedPosition);
-              }
-              
-              setDuration(musicService.getDuration());
-              setIsRestoringTrack(false);
-              setIsDownloading(false);
-              setSavedPosition(0);
-            }, 100);
-            
-          } catch (error) {
-            console.error("Error restaurando canción:", error);
-            if (mounted) {
-              setIsRestoringTrack(false);
-              setIsDownloading(false);
-              setSavedPosition(0);
-            }
-          }
-        };
-        restoreTrack();
-      }
-    }
-
-    return () => {
-      mounted = false;
-      // Cleanup seguro
-      if (timeUpdateCleanup && typeof timeUpdateCleanup === 'function') {
-        try {
-          timeUpdateCleanup();
-        } catch (error) {
-          console.error("Error cleaning up time update listener:", error);
-        }
-      }
-      if (endedCleanup && typeof endedCleanup === 'function') {
-        try {
-          endedCleanup();
-        } catch (error) {
-          console.error("Error cleaning up ended listener:", error);
-        }
-      }
-    };
-  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, throttledTimeUpdate, handleSongEnded]);
-
-  const handlePlayPause = useCallback(async () => {
-    if (!currentTrack || isDownloading) {
-      return;
-    }
-
-    try {
-      if (isPlaying) {
-        musicService.pause();
-        setIsPlaying(false);
-      } else {
-        const serviceCurrentTrack = musicService.getCurrentTrack();
-        const audioDuration = musicService.getDuration();
-        
-        if (serviceCurrentTrack?.id === currentTrack.id && audioDuration > 0) {
-          musicService.resume();
-          setIsPlaying(true);
-        } else {
-          setIsLoadingAudio(true);
-          try {
-            await musicService.play(currentTrack);
-            setIsPlaying(true);
-            setDuration(musicService.getDuration());
-          } finally {
-            setIsLoadingAudio(false);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error al reproducir/pausar:', error);
-      setIsPlaying(false);
-      setIsLoadingAudio(false);
-    }
-  }, [currentTrack, isDownloading, isPlaying]);
-
-  // Función optimizada para precargar siguiente canción
-  const preloadNextTrack = useCallback(async () => {
-    if (isPreloadingNext || playlist.length === 0 || isDownloading) return;
-    
-    setIsPreloadingNext(true);
-    
-    try {
-      let nextIndex;
-      if (isShuffle) {
-        const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
-        if (availableIndexes.length === 0) {
-          setIsPreloadingNext(false);
-          return;
-        }
-        nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
-      } else {
-        nextIndex = (currentTrackIndex + 1) % playlist.length;
-      }
-      
-      const nextTrack = playlist[nextIndex];
-      if (nextTrack) {
-        await window.musicAPI.getSongPath(nextTrack.id, nextTrack.title, true);
-      }
-    } catch (error) {
-      console.error("Error precargando:", error);
-    } finally {
-      setIsPreloadingNext(false);
-    }
-  }, [isPreloadingNext, playlist, isDownloading, isShuffle, currentTrackIndex]);
-
   // Track selection optimizada
   const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
     const now = Date.now();
@@ -434,6 +263,179 @@ export function App() {
       setPendingTrackId(null);
     }
   }, [lastActionTime, isDownloading, pendingTrackId, searchResults, importedPlaylists]);
+
+  const handleSongEnded = useCallback(() => {
+    console.log(`🎵 Canción terminada. RepeatMode: ${repeatMode}, Playlist length: ${playlist.length}`);
+    
+    if (repeatMode === "one") {
+      if (currentTrack) {
+        console.log("🔁 Repitiendo canción actual");
+        musicService.repeatCurrentTrack().then(() => {
+          setIsPlaying(true);
+          setCurrentTime(0);
+        }).catch(error => {
+          console.error("Error repitiendo canción:", error);
+          handleTrackSelect(currentTrack);
+        });
+      }
+      return;
+    }
+    
+    // Para "all" y "off", verificar si hay más canciones
+    if (playlist.length <= 1) {
+      console.log("📭 No hay más canciones en la playlist, pausando");
+      setIsPlaying(false);
+      return;
+    }
+    
+    // Determinar siguiente canción
+    let nextIndex;
+    if (isShuffle) {
+      const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
+      if (availableIndexes.length === 0) {
+        console.log("🔀 No hay más canciones disponibles para shuffle");
+        setIsPlaying(false);
+        return;
+      }
+      nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+    } else {
+      if (repeatMode === "all") {
+        // En modo "all", volver al inicio cuando termine la playlist
+        nextIndex = (currentTrackIndex + 1) % playlist.length;
+        console.log(`🔄 Modo "all": avanzando a canción ${nextIndex + 1}/${playlist.length}`);
+      } else {
+        // En modo "off", solo avanzar si no es la última canción
+        if (currentTrackIndex >= playlist.length - 1) {
+          console.log("⏹️ Última canción en modo 'off', pausando");
+          setIsPlaying(false);
+          return;
+        }
+        nextIndex = currentTrackIndex + 1;
+        console.log(`➡️ Modo "off": avanzando a canción ${nextIndex + 1}/${playlist.length}`);
+      }
+    }
+    
+    const nextTrack = playlist[nextIndex];
+    if (nextTrack) {
+      console.log(`🎵 Reproduciendo siguiente: ${nextTrack.title}`);
+      handleTrackSelect(nextTrack, playlist, nextIndex);
+    } else {
+      console.log("❌ No se encontró la siguiente canción, pausando");
+      setIsPlaying(false);
+    }
+  }, [repeatMode, currentTrack, playlist, currentTrackIndex, isShuffle, handleTrackSelect]);
+
+  // Music service setup (optimizado)
+  useEffect(() => {
+    let mounted = true;
+    let timeUpdateCleanup: (() => void) | void;
+    let endedCleanup: (() => void) | void;
+    
+    // Setup listeners con manejo seguro de tipos
+    try {
+      timeUpdateCleanup = musicService.onTimeUpdate(throttledTimeUpdate);
+    } catch (error) {
+      console.error("Error setting up time update listener:", error);
+    }
+
+    try {
+      endedCleanup = musicService.onEnded(() => {
+        if (mounted) {
+          setIsPlaying(false);
+          handleSongEnded();
+        }
+      });
+    } catch (error) {
+      console.error("Error setting up ended listener:", error);
+    }
+
+    if (settingsLoaded) {
+      musicService.setVolume(isMuted ? 0 : volume);
+      
+      if (isRestoringTrack && currentTrack) {
+        const restoreTrack = async () => {
+          if (!mounted) return;
+          
+          try {
+            setIsDownloading(true);
+            await musicService.loadTrackForRestore(currentTrack);
+            
+            setTimeout(() => {
+              if (!mounted) return;
+              
+              if (savedPosition > 0) {
+                musicService.seek(savedPosition);
+                setCurrentTime(savedPosition);
+              }
+              
+              setDuration(musicService.getDuration());
+              setIsRestoringTrack(false);
+              setIsDownloading(false);
+              setSavedPosition(0);
+            }, 100);
+            
+          } catch (error) {
+            console.error("Error restaurando canción:", error);
+            if (mounted) {
+              setIsRestoringTrack(false);
+              setIsDownloading(false);
+              setSavedPosition(0);
+            }
+          }
+        };
+        restoreTrack();
+      }
+    }
+
+    return () => {
+      mounted = false;
+      if (typeof timeUpdateCleanup === 'function') {
+        timeUpdateCleanup();
+      }
+      if (typeof endedCleanup === 'function') {
+        endedCleanup();
+      }
+    };
+  }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, throttledTimeUpdate, handleSongEnded]);
+
+  const handlePlayPause = useCallback(() => {
+    if (isPlaying) {
+      musicService.pause();
+      setIsPlaying(false);
+    } else {
+      if (currentTrack) {
+        musicService.play(currentTrack);
+        setIsPlaying(true);
+      }
+    }
+  }, [isPlaying, currentTrack]);
+
+  const preloadNextTrack = useCallback(async () => {
+    if (isPreloadingNext || playlist.length <= 1) return;
+    
+    setIsPreloadingNext(true);
+    
+    try {
+      let nextIndex;
+      if (isShuffle) {
+        const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
+        nextIndex = availableIndexes.length > 0 ? 
+          availableIndexes[Math.floor(Math.random() * availableIndexes.length)] : 
+          currentTrackIndex;
+      } else {
+        nextIndex = (currentTrackIndex + 1) % playlist.length;
+      }
+      
+      const nextTrack = playlist[nextIndex];
+      if (nextTrack && nextTrack.id !== currentTrack?.id) {
+        await window.musicAPI.getSongPath(nextTrack.id, nextTrack.title);
+      }
+    } catch (error) {
+      console.error('Error precargando siguiente canción:', error);
+    } finally {
+      setIsPreloadingNext(false);
+    }
+  }, [isPreloadingNext, playlist, isShuffle, currentTrackIndex, currentTrack]);
 
   const handleSearch = useCallback((query: string) => {
     debouncedSearch(query);
