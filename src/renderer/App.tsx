@@ -399,13 +399,29 @@ export function App() {
   }, [settingsLoaded, volume, isMuted, isRestoringTrack, currentTrack, savedPosition, throttledTimeUpdate, handleSongEnded]);
 
   const handlePlayPause = useCallback(() => {
+    if (!currentTrack) return;
+    
     if (isPlaying) {
+      console.log("App: Pausando reproducción");
       musicService.pause();
       setIsPlaying(false);
     } else {
-      if (currentTrack) {
-        musicService.play(currentTrack);
+      console.log("App: Intentando reanudar reproducción");
+      
+      // Si el audio ya está cargado y solo pausado, usar resume
+      if (musicService.isPaused && musicService.isPaused()) {
+        console.log("App: Usando resume para canción pausada");
+        musicService.resume();
         setIsPlaying(true);
+      } else {
+        // Si no hay audio cargado o terminó, cargar desde el principio
+        console.log("App: Cargando canción desde el principio");
+        musicService.play(currentTrack).then(() => {
+          setIsPlaying(true);
+        }).catch(error => {
+          console.error("Error en play:", error);
+          setIsPlaying(false);
+        });
       }
     }
   }, [isPlaying, currentTrack]);

@@ -12,15 +12,17 @@ class MusicService {
       this.isLoadingTrack = true;
       console.log("MusicService: Iniciando carga de", track.title);
       
-      // Limpiar cualquier reproducción anterior inmediatamente
-      this.cleanup();
-      
       // Si es la misma canción y ya está cargada, solo reproducir
-      if (this.currentTrack && this.currentTrack.id === track.id && this.audio && this.audio.paused) {
+      if (this.currentTrack && this.currentTrack.id === track.id && this.audio && !this.audio.ended) {
+        console.log("MusicService: Reanudando canción existente");
         await this.audio.play();
         this.isLoadingTrack = false;
-        console.log("MusicService: Reanudando canción existente");
         return;
+      }
+
+      // Limpiar cualquier reproducción anterior solo si es diferente canción
+      if (!this.currentTrack || this.currentTrack.id !== track.id) {
+        this.cleanup();
       }
 
       // Obtener la ruta local del archivo con timeout
@@ -112,21 +114,45 @@ class MusicService {
   }
 
   // Método para limpiar recursos de audio
-  private cleanup(): void {
+  private cleanup(preserveState: boolean = false): void {
     if (this.audio) {
-      this.audio.pause();
+      if (!preserveState) {
+        this.audio.pause();
+      }
       this.audio.removeEventListener("timeupdate", this.handleTimeUpdate);
       this.audio.removeEventListener("ended", this.handleEnded);
       this.audio.removeEventListener("loadedmetadata", this.handleLoadedMetadata);
       this.audio.removeEventListener("playing", this.handlePlaying);
       this.audio.removeEventListener("pause", this.handlePause);
-      this.audio.src = "";
-      this.audio = null;
+      
+      if (!preserveState) {
+        this.audio.src = "";
+        this.audio = null;
+      }
+    }
+  }
+
+  // NUEVO: Método específico para reanudar
+  resume(): void {
+    if (this.audio && this.audio.paused && !this.isLoadingTrack && !this.audio.ended) {
+      console.log(`MusicService: Reanudando desde ${this.audio.currentTime}s`);
+      this.audio.play().catch(error => {
+        console.error("Error al reanudar:", error);
+      });
+    } else {
+      console.warn("Cannot resume: audio not ready", {
+        hasAudio: !!this.audio,
+        isPaused: this.audio?.paused,
+        isLoading: this.isLoadingTrack,
+        hasEnded: this.audio?.ended,
+        currentTime: this.audio?.currentTime
+      });
     }
   }
 
   pause(): void {
-    if (this.audio && !this.audio.paused) {
+    if (this.audio && !this.audio.paused && !this.audio.ended) {
+      console.log(`MusicService: Pausando en ${this.audio.currentTime}s`);
       this.audio.pause();
     }
   }
@@ -356,14 +382,6 @@ class MusicService {
     return this.isLoadingTrack;
   }
 
-  resume(): void {
-    if (this.audio && this.audio.paused && !this.isLoadingTrack) {
-      this.audio.play().catch(error => {
-        console.error("Error al reanudar:", error);
-      });
-    }
-  }
-
   async repeatCurrentTrack(): Promise<void> {
     if (!this.audio || !this.currentTrack) {
       throw new Error("No hay audio o track para repetir");
@@ -393,8 +411,14 @@ class MusicService {
     
     return !this.audio.paused && 
            !this.audio.ended && 
-           this.audio.currentTime > 0 &&
+           this.audio.currentTime >= 0 &&
            this.audio.readyState > 2;
+  }
+
+  // Mejorar el método isPaused
+  isPaused(): boolean {
+    if (!this.audio) return false;
+    return this.audio.paused && !this.audio.ended && this.audio.currentTime > 0;
   }
 
   // Nuevo método para verificar si la canción terminó

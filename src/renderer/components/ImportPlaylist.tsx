@@ -162,15 +162,12 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
         return;
       }
       
-      // Crear tarea en segundo plano
+      // Crear tarea en segundo plano SILENCIOSAMENTE
       const taskId = await window.importManagerAPI.createTask(playlistName, spotifyTracks);
       
       console.log(`✅ Tarea creada: ${taskId}`);
       
-      // Mostrar mensaje de confirmación
-      alert(`¡Importación iniciada en segundo plano!\n\nPlaylist: "${playlistName}"\nCanciones: ${spotifyTracks.length}\n\nPuedes seguir usando la aplicación mientras se procesan las canciones. Recibirás una notificación cuando termine.`);
-      
-      // Cerrar modal
+      // Cerrar modal directamente sin mensaje
       onImportComplete([], playlistName);
       
     } catch (error) {

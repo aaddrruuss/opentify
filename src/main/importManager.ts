@@ -135,9 +135,11 @@ class BackgroundImportManager {
     const task = this.activeTasks.get(taskId);
     if (task && task.status === 'running') {
       task.status = 'paused';
+      // NO reiniciar processedTracks - mantener progreso
+      console.log(`⏸️ Tarea pausada en canción ${task.processedTracks}/${task.totalTracks}: ${taskId}`);
+      
       this.saveTasks();
       this.notifyFrontend('task-updated', task);
-      console.log(`⏸️ Tarea pausada: ${taskId}`);
       return true;
     }
     return false;
@@ -153,9 +155,10 @@ class BackgroundImportManager {
         this.processingQueue.push(taskId);
       }
       
+      console.log(`▶️ Tarea reanudada desde canción ${task.processedTracks}/${task.totalTracks}: ${taskId}`);
+      
       this.saveTasks();
       this.notifyFrontend('task-updated', task);
-      console.log(`▶️ Tarea reanudada: ${taskId}`);
       
       if (!this.isProcessing) {
         this.processQueue();
@@ -222,25 +225,44 @@ class BackgroundImportManager {
     console.log("✅ Procesamiento de cola completado");
   }
 
-  // Procesar una tarea individual
+  // Procesar una tarea individual - CORREGIDO COMPLETAMENTE
   private async processTask(task: ImportTask) {
     console.log(`🎵 Procesando tarea: ${task.playlistName} (${task.processedTracks}/${task.totalTracks})`);
     
     // Configuración conservadora para no interferir con la reproducción
-    const batchSize = 1;
     const batchDelay = 2000; // 2 segundos entre canciones
     const searchTimeout = 12000; // 12 segundos timeout
     
+    // NUEVO: Verificar qué canciones ya fueron procesadas exitosamente
+    let actualProcessedCount = 0;
+    for (let i = 0; i < task.processedResults.length; i++) {
+      if (task.processedResults[i].status === 'found' || task.processedResults[i].status === 'not_found') {
+        actualProcessedCount = i + 1;
+      } else {
+        break; // Parar en la primera canción no procesada
+      }
+    }
+    
+    // Sincronizar el contador si está desfasado
+    if (actualProcessedCount !== task.processedTracks) {
+      console.log(`🔧 Sincronizando contador: de ${task.processedTracks} a ${actualProcessedCount}`);
+      task.processedTracks = actualProcessedCount;
+    }
+    
+    // CONTINUAR desde donde realmente se quedó
     for (let i = task.processedTracks; i < task.totalTracks; i++) {
       // Verificar si la tarea sigue activa
       if (task.status !== 'running') {
-        console.log(`⏸️ Tarea pausada/cancelada: ${task.id}`);
+        console.log(`⏸️ Tarea pausada/cancelada en canción ${i + 1}: ${task.id}`);
         return;
       }
       
       const trackData = task.processedResults[i];
+      
+      // SOLO procesar si realmente está pending
       if (trackData.status !== 'pending') {
-        continue; // Ya procesado
+        console.log(`⏭️ Saltando canción ya procesada: ${trackData.trackName} (${trackData.status})`);
+        continue;
       }
       
       task.currentTrack = trackData.trackName;
@@ -276,12 +298,13 @@ class BackgroundImportManager {
         console.error(`❌ Error buscando "${trackData.trackName}":`, error);
       }
       
+      // Actualizar progreso CORRECTAMENTE
       task.processedTracks = i + 1;
       this.saveTasks();
       this.notifyFrontend('task-updated', task);
       
       // Delay entre canciones para no sobrecargar
-      if (i < task.totalTracks - 1) {
+      if (i < task.totalTracks - 1 && task.status === 'running') {
         await new Promise(resolve => setTimeout(resolve, batchDelay));
       }
     }
@@ -404,11 +427,128 @@ class BackgroundImportManager {
     }
   }
 
-  // Guardar playlist a archivo (reutilizar lógica existente)
+  // Guardar playlist a archivo (CORREGIDO para usar la función correcta)
   private async savePlaylistToFile(name: string, tracks: any[]) {
-    // Importar funciones necesarias del ipcHandlers
-    const { savePlaylist } = require("./ipcHandlers");
-    await savePlaylist(name, tracks);
+    try {
+      // Obtener la función de IPC handlers correctamente
+      const { setupIpcHandlers } = require("./ipcHandlers");
+      
+      // Usar directamente la API de playlists para asegurar compatibilidad
+      const { ipcMain } = require("electron");
+      
+      // Simular llamada IPC para guardar playlist
+      const success = await new Promise<boolean>((resolve) => {
+        // Importar la función directamente
+        const ipcHandlers = require("./ipcHandlers");
+        
+        // Usar la función interna de guardado
+        this.savePlaylistDirect(name, tracks)
+          .then(() => resolve(true))
+          .catch((error) => {
+            console.error("Error guardando playlist:", error);
+            resolve(false);
+          });
+      });
+      
+      if (success) {
+        console.log(`💾 Playlist "${name}" guardada exitosamente`);
+      } else {
+        throw new Error("Error al guardar playlist");
+      }
+    } catch (error) {
+      console.error("Error en savePlaylistToFile:", error);
+      throw error;
+    }
+  }
+
+  // Función auxiliar para guardar playlist directamente
+  private async savePlaylistDirect(playlistName: string, tracks: any[]): Promise<void> {
+    const path = require("path");
+    const fs = require("fs");
+    const { app } = require("electron");
+    
+    // Reutilizar funciones del ipcHandlers
+    const getPlaylistsDirectory = () => {
+      return path.join(app.getPath("userData"), "adrus-music", "playlists");
+    };
+    
+    const sanitizeFileName = (fileName: string): string => {
+      return fileName.replace(/[<>:"/\\|?*]/g, "_").replace(/\s+/g, "_");
+    };
+    
+    const getPlaylistPath = (playlistName: string): string => {
+      const sanitizedName = sanitizeFileName(playlistName);
+      return path.join(getPlaylistsDirectory(), sanitizedName);
+    };
+    
+    try {
+      // Asegurar que el directorio de playlists existe
+      const playlistsDir = getPlaylistsDirectory();
+      if (!fs.existsSync(playlistsDir)) {
+        fs.mkdirSync(playlistsDir, { recursive: true });
+      }
+      
+      const playlistDir = getPlaylistPath(playlistName);
+      
+      // Crear directorio para la playlist
+      if (!fs.existsSync(playlistDir)) {
+        fs.mkdirSync(playlistDir, { recursive: true });
+      }
+      
+      // Guardar metadata de la playlist
+      const playlistData = {
+        name: playlistName,
+        tracks: tracks,
+        createdAt: new Date().toISOString(),
+        totalTracks: tracks.length,
+        importedFromSpotify: true // Marcar como importada
+      };
+      
+      const metadataPath = path.join(playlistDir, 'playlist.json');
+      fs.writeFileSync(metadataPath, JSON.stringify(playlistData, null, 2), 'utf8');
+      
+      console.log(`💾 Playlist "${playlistName}" guardada en:`, playlistDir);
+      
+      // Iniciar descarga de canciones en background (opcional para importaciones)
+      this.downloadPlaylistTracksBackground(playlistName, tracks);
+      
+    } catch (error) {
+      console.error("Error en savePlaylistDirect:", error);
+      throw error;
+    }
+  }
+
+  // Función para descargar canciones en background (más conservadora)
+  private async downloadPlaylistTracksBackground(playlistName: string, tracks: any[]) {
+    const path = require("path");
+    const fs = require("fs");
+    
+    console.log(`📥 Iniciando descarga en background de ${tracks.length} canciones para "${playlistName}"`);
+    
+    // Configuración muy conservadora
+    const delay = 5000; // 5 segundos entre canciones
+    
+    for (let i = 0; i < Math.min(tracks.length, 10); i++) { // Solo las primeras 10
+      const track = tracks[i];
+      
+      try {
+        // Usar setTimeout para no bloquear
+        setTimeout(async () => {
+          try {
+            console.log(`📥 Precargando ${i + 1}/10: ${track.title}`);
+            // Solo precargar, no descargar activamente
+            if (window && (window as any).musicAPI) {
+              await (window as any).musicAPI.getSongPath(track.id, track.title, true);
+            }
+          } catch (error) {
+            console.log(`⚠️ Error precargando ${track.title}:`, error);
+          }
+        }, i * delay);
+        
+      } catch (error) {
+        console.log(`Error programando descarga de ${track.title}:`, error);
+      }
+    }
   }
 
   // Notificar al frontend

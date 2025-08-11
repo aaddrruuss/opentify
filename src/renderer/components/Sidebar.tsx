@@ -126,18 +126,16 @@ export function Sidebar({
         <div className="px-4 mb-4">
           <button
             onClick={() => setShowImportManager(true)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors group"
           >
-            <Download className="h-5 w-5" />
-            <span className="flex-1">Importaciones activas</span>
-            <span className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-xs font-semibold">
+            <Download className="h-5 w-5 animate-pulse" />
+            <span className="flex-1">Importando playlists...</span>
+            <span className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
               {activeImports}
             </span>
           </button>
         </div>
       )}
-
-      {/* ...existing code... */}
       
       {showImportManager && (
         <ImportManagerPopup 

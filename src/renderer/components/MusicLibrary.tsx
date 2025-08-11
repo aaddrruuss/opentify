@@ -69,6 +69,52 @@ export const MusicLibrary = memo(({
     }
   }, [currentView, playlistsLoaded]);
 
+  // NUEVO: Escuchar completación de importaciones en segundo plano
+  useEffect(() => {
+    const handleImportCompletion = (event: any, data: any) => {
+      if (data.event === 'task-completed') {
+        console.log('🎉 Importación completada, recargando playlists...');
+        
+        // Forzar recarga de playlists después de un breve delay
+        setTimeout(async () => {
+          try {
+            setPlaylistsLoaded(false); // Forzar recarga
+            
+            const playlistNames = await window.playlistAPI.getPlaylists();
+            const playlists: {[key: string]: Track[]} = {};
+            
+            for (const name of playlistNames) {
+              try {
+                const tracks = await window.playlistAPI.loadPlaylist(name);
+                playlists[name] = tracks;
+              } catch (error) {
+                console.error(`Error loading playlist ${name}:`, error);
+              }
+            }
+            
+            setImportedPlaylists(playlists);
+            setPlaylistsLoaded(true);
+            
+            console.log(`🔄 Playlists recargadas después de importación completada: ${playlistNames.length} playlists`);
+          } catch (error) {
+            console.error("Error recargando playlists después de importación:", error);
+            setPlaylistsLoaded(true);
+          }
+        }, 3000); // 3 segundos de delay para dar tiempo al guardado
+      }
+    };
+
+    if (window.electronAPI) {
+      window.electronAPI.on('import-manager', handleImportCompletion);
+      
+      return () => {
+        if (window.electronAPI) {
+          window.electronAPI.removeListener('import-manager', handleImportCompletion);
+        }
+      };
+    }
+  }, []);
+
   const handleSearchSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (inputValue.trim()) {
@@ -91,9 +137,11 @@ export const MusicLibrary = memo(({
       }));
     }
     
-    // Siempre recargar las playlists para capturar las importaciones en segundo plano
+    // MEJORADO: Recargar más agresivamente
     setTimeout(async () => {
       try {
+        console.log(`🔄 Recargando playlists después de importación manual...`);
+        
         const playlistNames = await window.playlistAPI.getPlaylists();
         const playlists: {[key: string]: Track[]} = {};
         
@@ -107,11 +155,12 @@ export const MusicLibrary = memo(({
         }
         
         setImportedPlaylists(playlists);
-        console.log(`🔄 Playlists recargadas después de importación`);
+        setPlaylistsLoaded(true);
+        console.log(`🔄 Playlists recargadas: ${playlistNames.length} total`);
       } catch (error) {
         console.error("Error recargando playlists:", error);
       }
-    }, 2000); // Delay de 2 segundos para dar tiempo a que se procese
+    }, 1000); // Reducir delay a 1 segundo
     
     setShowImportModal(false);
   }, []);

@@ -154,7 +154,7 @@ export function ImportManagerPopup({ isOpen, onClose }: ImportManagerPopupProps)
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 pb-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -264,21 +264,6 @@ export function ImportManagerPopup({ isOpen, onClose }: ImportManagerPopupProps)
               ))}
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-700">
-          <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-            <span>
-              {tasks.length} importación{tasks.length !== 1 ? 'es' : ''} activa{tasks.length !== 1 ? 's' : ''}
-            </span>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
-            >
-              Cerrar
-            </button>
-          </div>
         </div>
       </div>
 
