@@ -46,12 +46,16 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
           const artistName = fields[3]?.replace(/"/g, '').trim();
           const durationMs = parseInt(fields[5]?.replace(/"/g, '').trim());
           
-          if (trackName && artistName && !isNaN(durationMs)) {
+          // Descartar canciones con nombre "UNDEFINED" (canciones corruptas)
+          if (trackName && artistName && !isNaN(durationMs) && 
+              trackName.toUpperCase() !== 'UNDEFINED') {
             tracks.push({
               trackName,
               artistName,
               durationMs
             });
+          } else if (trackName.toUpperCase() === 'UNDEFINED') {
+            console.log(`⚠️ Descartando canción corrupta: "${trackName}"`);
           }
         }
       } catch (error) {
@@ -143,94 +147,117 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
       const csvText = await csvFile.text();
       const spotifyTracks = parseCsv(csvText);
       
-      // PROCESAR TODAS las canciones, no limitarlo a 50
       const tracksToProcess: ImportedTrack[] = spotifyTracks.map(track => ({
         ...track,
         status: 'pending'
       }));
       
-      console.log(`Procesando ${tracksToProcess.length} canciones de la playlist`);
+      console.log(`🚀 IMPORTACIÓN ROBUSTA: Procesando ${tracksToProcess.length} canciones`);
       setImportedTracks(tracksToProcess);
       
-      // Procesar en lotes pequeños pero TODAS las canciones
-      const batchSize = 2; // Reducir a 2 para ser más conservadores
-      const batchDelay = 3000; // 3 segundos entre lotes para evitar rate limits
+      // Configuración más conservadora para reducir ancho de banda
+      const batchSize = 2; // Reducir a 2 para menor consumo
+      const batchDelay = 3000; // Aumentar delay a 3 segundos
+      const searchTimeout = 15000; // Aumentar timeout a 15 segundos
+      const maxRetries = 1; // Reducir reintentos para evitar spam
       
       for (let i = 0; i < tracksToProcess.length; i += batchSize) {
         const batch = tracksToProcess.slice(i, i + batchSize);
         const batchNum = Math.floor(i/batchSize) + 1;
         const totalBatches = Math.ceil(tracksToProcess.length / batchSize);
         
-        console.log(`📦 Procesando lote ${batchNum}/${totalBatches} (${batch.length} canciones)`);
+        console.log(`📦 Lote ${batchNum}/${totalBatches} - Procesando ${batch.length} canciones (modo conservador)`);
         
-        // Procesar el lote actual
-        await Promise.all(batch.map(async (track, batchIndex) => {
-          const globalIndex = i + batchIndex;
+        // Procesar secuencialmente para reducir carga de red
+        for (const track of batch) {
+          const globalIndex = i + batch.indexOf(track);
           setCurrentProcessing(globalIndex);
           
           track.status = 'searching';
           setImportedTracks([...tracksToProcess]);
           
-          try {
-            // Crear query más simple y limpia
-            const cleanTitle = track.trackName.replace(/[^\w\s-]/g, '').trim();
-            const mainArtist = track.artistName.split(',')[0].split('&')[0].split('feat')[0].replace(/[^\w\s-]/g, '').trim();
-            const searchQuery = `${mainArtist} ${cleanTitle}`.substring(0, 80);
-            
-            console.log(`🔍 Buscando: "${searchQuery}" (objetivo: ${Math.round(track.durationMs / 1000)}s)`);
-            
-            // Timeout más largo para búsquedas individuales
-            const searchPromise = window.musicAPI.searchMusic(searchQuery);
-            const timeoutPromise = new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout')), 20000) // 20 segundos
-            );
-            
-            const searchResults = await Promise.race([searchPromise, timeoutPromise]);
-            track.searchResults = searchResults;
-            
-            // Encontrar la mejor coincidencia usando el algoritmo mejorado
-            const bestMatch = findBestMatchByDuration(searchResults, track.durationMs);
-            
-            if (bestMatch) {
-              track.matchedTrack = {
-                ...bestMatch,
-                // USAR EL NOMBRE ORIGINAL DEL CSV
-                title: track.trackName,
-                artist: track.artistName
-              };
-              track.status = 'found';
-              console.log(`✓ ${globalIndex + 1}/${tracksToProcess.length} - Encontrada: "${track.trackName}" (${bestMatch.duration})`);
-            } else {
-              track.status = 'not_found';
-              console.log(`✗ ${globalIndex + 1}/${tracksToProcess.length} - No encontrada: "${track.trackName}"`);
+          let retryCount = 0;
+          let searchSuccessful = false;
+          
+          while (retryCount < maxRetries && !searchSuccessful) {
+            try {
+              // Query más limpia y simple
+              const cleanTitle = track.trackName.replace(/[^\w\s]/g, '').trim();
+              const mainArtist = track.artistName.split(',')[0].split('&')[0].split('feat')[0].trim();
+              const searchQuery = `${mainArtist} ${cleanTitle}`.substring(0, 50);
+              
+              console.log(`🔍 [${globalIndex + 1}/${tracksToProcess.length}] "${searchQuery}"`);
+              
+              // Búsqueda con timeout y manejo de errores HTTP
+              const searchPromise = window.musicAPI.searchMusic(searchQuery);
+              const timeoutPromise = new Promise<Track[]>((_, reject) => 
+                setTimeout(() => reject(new Error('Search timeout')), searchTimeout)
+              );
+              
+              const searchResults = await Promise.race([searchPromise, timeoutPromise]);
+              track.searchResults = searchResults;
+              
+              // Si llegamos aquí, la búsqueda fue exitosa
+              searchSuccessful = true;
+              
+              // Buscar la mejor coincidencia
+              const bestMatch = findBestMatchByDuration(searchResults, track.durationMs);
+              
+              if (bestMatch) {
+                track.matchedTrack = {
+                  ...bestMatch,
+                  title: track.trackName,
+                  artist: track.artistName
+                };
+                track.status = 'found';
+                console.log(`✅ [${globalIndex + 1}/${tracksToProcess.length}] Encontrada`);
+              } else {
+                track.status = 'not_found';
+                console.log(`⚠️ [${globalIndex + 1}/${tracksToProcess.length}] Sin coincidencia`);
+              }
+              
+            } catch (error) {
+              retryCount++;
+              const errorMsg = error instanceof Error ? error.message : String(error);
+              console.error(`💥 Error intento ${retryCount}: ${errorMsg}`);
+              
+              if (retryCount < maxRetries) {
+                // Esperar más tiempo si es un error HTTP
+                const waitTime = errorMsg.includes('403') ? 5000 : 2000;
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+              } else {
+                track.status = 'not_found';
+                console.error(`❌ Falló definitivamente: ${track.trackName}`);
+              }
             }
-          } catch (error) {
-            console.error(`❌ Error buscando ${track.trackName}:`, error);
-            track.status = 'not_found';
           }
           
           setImportedTracks([...tracksToProcess]);
-        }));
+          
+          // Pequeño delay entre canciones individuales
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
         
-        // Delay entre lotes para no sobrecargar
+        // Delay más largo entre lotes
         if (i + batchSize < tracksToProcess.length) {
-          console.log(`⏳ Esperando ${batchDelay/1000}s antes del siguiente lote...`);
+          console.log(`⏸️ Pausa de ${batchDelay/1000}s para reducir carga de red...`);
           await new Promise(resolve => setTimeout(resolve, batchDelay));
         }
       }
       
       const foundCount = tracksToProcess.filter(t => t.status === 'found').length;
-      console.log(`🏁 Importación completada: ${foundCount}/${tracksToProcess.length} canciones encontradas`);
+      const notFoundCount = tracksToProcess.filter(t => t.status === 'not_found').length;
+      console.log(`🏁 IMPORTACIÓN COMPLETADA: ${foundCount} encontradas, ${notFoundCount} no encontradas`);
       
     } catch (error) {
-      console.error('Error procesando CSV:', error);
+      console.error('Error crítico procesando CSV:', error);
     } finally {
       setIsProcessing(false);
       setCurrentProcessing(-1);
     }
   };
 
-  // Algoritmo mejorado para encontrar la canción más cercana por duración
+  // Algoritmo de matching MÁS PERMISIVO para acelerar
   const findBestMatchByDuration = (searchResults: Track[], targetDurationMs: number): Track | null => {
     if (searchResults.length === 0) return null;
     
@@ -238,7 +265,6 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
     let smallestDifference = Infinity;
     
     for (const track of searchResults) {
-      // Convertir duración de "MM:SS" a millisegundos
       const durationParts = track.duration.split(':');
       if (durationParts.length !== 2) continue;
       
@@ -246,26 +272,17 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
       const seconds = parseInt(durationParts[1]) || 0;
       const trackDurationMs = (minutes * 60 + seconds) * 1000;
       
-      // Calcular diferencia absoluta (da igual si es mayor o menor)
       const difference = Math.abs(trackDurationMs - targetDurationMs);
       
       if (difference < smallestDifference) {
         smallestDifference = difference;
         bestMatch = track;
-        
-        // Log para debugging
-        console.log(`📊 Nueva mejor coincidencia: ${track.title} (${track.duration}) - diff: ${Math.round(difference/1000)}s`);
       }
     }
     
-    // Ser más permisivo: aceptar hasta 3 minutos de diferencia
-    const maxDifference = 180000; // 3 minutos en ms
-    if (smallestDifference <= maxDifference) {
-      return bestMatch;
-    }
-    
-    console.log(`⚠️ Mejor coincidencia rechazada por diferencia excesiva: ${Math.round(smallestDifference/1000)}s > 180s`);
-    return null;
+    // Ser MÁS PERMISIVO: aceptar hasta 5 minutos de diferencia para acelerar
+    const maxDifference = 300000; // 5 minutos en ms
+    return smallestDifference <= maxDifference ? bestMatch : null;
   };
 
   const handleImport = async () => {

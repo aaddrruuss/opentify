@@ -1,169 +1,74 @@
 import React from 'react';
-import { PlayIcon, ClockIcon } from 'lucide-react';
+import { Music, Clock } from 'lucide-react';
 import { Track } from '../types/index';
 
 interface TrackListProps {
   tracks: Track[];
-  onTrackSelect: (track: Track) => void;
-  isDownloading?: boolean;
-  currentTrackId?: string;
+  onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
   compact?: boolean;
 }
 
-export function TrackList({ tracks, onTrackSelect, isDownloading = false, currentTrackId, compact = false }: TrackListProps) {
-  const getImageUrl = (track: Track) => {
-    console.log("Track data:", track); // Debug log
-    
-    // Priorizar thumbnail sobre cover
-    let imageUrl = track.thumbnail || track.cover;
-    
-    if (imageUrl) {
-      console.log("Using image URL:", imageUrl); // Debug log
-      return imageUrl;
-    }
-    
-    // Construir URL de YouTube si tenemos el ID
-    if (track.id && track.id !== 'demo1') {
-      const youtubeUrl = `https://img.youtube.com/vi/${track.id}/hqdefault.jpg`;
-      console.log("Using YouTube URL:", youtubeUrl); // Debug log
-      return youtubeUrl;
-    }
-    
-    const fallbackUrl = 'https://via.placeholder.com/120x90/cccccc/666666?text=♪';
-    console.log("Using fallback URL:", fallbackUrl); // Debug log
-    return fallbackUrl;
-  };
-
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>, track: Track) => {
-    const target = e.target as HTMLImageElement;
-    const currentSrc = target.src;
-    
-    console.log("Image error for:", currentSrc); // Debug log
-    
-    // Secuencia de fallbacks para YouTube
-    if (currentSrc.includes('maxresdefault')) {
-      target.src = `https://img.youtube.com/vi/${track.id}/hqdefault.jpg`;
-    } else if (currentSrc.includes('hqdefault')) {
-      target.src = `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`;
-    } else if (currentSrc.includes('mqdefault')) {
-      target.src = `https://img.youtube.com/vi/${track.id}/default.jpg`;
-    } else {
-      // Último fallback
-      target.src = 'https://via.placeholder.com/120x90/cccccc/666666?text=♪';
-    }
-    
-    console.log("Fallback to:", target.src); // Debug log
-  };
-
-  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.log("Image loaded successfully:", e.currentTarget.src); // Debug log
-  };
-
-  if (compact) {
-    return (
-      <div className="space-y-1">
-        {tracks.map((track) => (
-          <div
-            key={track.id}
-            onClick={() => onTrackSelect(track)}
-            className="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-          >
+export function TrackList({ tracks, onTrackSelect, compact = false }: TrackListProps) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden">
+      {tracks.map((track, index) => (
+        <button
+          key={track.id}
+          onClick={() => {
+            console.log(`🎯 TrackList: Seleccionando canción ${index + 1}/${tracks.length}: ${track.title}`);
+            onTrackSelect(track, tracks, index);
+          }}
+          className={`w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${
+            compact ? 'py-2' : ''
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="relative flex-shrink-0">
+              <img
+                src={track.thumbnail}
+                alt={track.title}
+                className={`${compact ? 'w-10 h-10' : 'w-12 h-12'} rounded object-cover`}
+                onError={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  // Mostrar el ícono cuando falla la imagen
+                  const musicIcon = target.nextElementSibling as HTMLElement;
+                  if (musicIcon) {
+                    musicIcon.style.display = 'flex';
+                  }
+                }}
+                onLoad={(e) => {
+                  const target = e.currentTarget as HTMLImageElement;
+                  // Ocultar el ícono cuando la imagen carga
+                  const musicIcon = target.nextElementSibling as HTMLElement;
+                  if (musicIcon) {
+                    musicIcon.style.display = 'none';
+                  }
+                }}
+              />
+              <div className={`absolute inset-0 bg-[#2196F3] dark:bg-blue-600 rounded flex items-center justify-center ${compact ? 'w-10 h-10' : 'w-12 h-12'}`}>
+                <Music className={`text-white ${compact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+              </div>
+            </div>
+            
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
+              <h3 className={`font-medium text-gray-900 dark:text-gray-100 truncate ${compact ? 'text-sm' : ''}`}>
                 {track.title}
               </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {track.artist}
-              </p>
+              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                <span className={`truncate ${compact ? 'text-xs' : 'text-sm'}`}>
+                  {track.artist}
+                </span>
+              </div>
             </div>
-            <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-              {track.duration}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-md shadow-sm border dark:border-gray-700">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
-            <th className="p-4 text-left w-10">#</th>
-            <th className="p-4 text-left">Título</th>
-            <th className="p-4 text-left hidden md:table-cell">Artista</th>
-            <th className="p-4 text-right">
-              <ClockIcon className="h-4 w-4 inline" />
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {tracks.map((track, index) => {
-            const isCurrentTrack = track.id === currentTrackId;
-            const isTrackDownloading = isDownloading && isCurrentTrack;
             
-            return (
-              <tr
-                key={track.id}
-                className={`border-b border-gray-200 dark:border-gray-700 cursor-pointer group transition-colors ${
-                  isTrackDownloading 
-                    ? 'bg-blue-50 dark:bg-blue-900/20' 
-                    : 'hover:bg-[#F5F5F5] dark:hover:bg-gray-700'
-                }`}
-                onClick={() => !isDownloading && onTrackSelect(track)}
-              >
-                <td className="p-4 text-gray-500 dark:text-gray-400 text-sm">
-                  {isTrackDownloading ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#2196F3] border-t-transparent" />
-                  ) : (
-                    <>
-                      <span className="group-hover:hidden">{index + 1}</span>
-                      <PlayIcon className="h-4 w-4 hidden group-hover:block text-[#2196F3]" />
-                    </>
-                  )}
-                </td>
-                <td className="p-4">
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 mr-3 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden border dark:border-gray-600">
-                      <img
-                        src={getImageUrl(track)}
-                        alt={track.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => handleImageError(e, track)}
-                        onLoad={handleImageLoad}
-                        loading="lazy"
-                        crossOrigin="anonymous"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <p className={`font-medium truncate ${
-                        isCurrentTrack ? 'text-[#2196F3]' : 'text-gray-900 dark:text-gray-100'
-                      }`}>
-                        {track.title}
-                        {isTrackDownloading && (
-                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                            (Descargando...)
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate md:hidden">
-                        {track.artist}
-                      </p>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-4 text-gray-500 dark:text-gray-400 hidden md:table-cell">
-                  <span className="truncate block">{track.artist}</span>
-                </td>
-                <td className="p-4 text-right text-gray-500 dark:text-gray-400 text-sm">
-                  {track.duration}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 flex-shrink-0">
+              <Clock className="w-3 h-3" />
+              <span className="text-xs">{track.duration}</span>
+            </div>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }

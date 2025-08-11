@@ -37,6 +37,15 @@ export interface PlaylistAPI {
   deletePlaylist: (name: string) => Promise<boolean>;
 }
 
+export interface MusicLibraryProps {
+  onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
+  currentView: string;
+  searchResults: Track[];
+  onSearch: (query: string) => void;
+  isLoading: boolean;
+  searchQuery: string;
+}
+
 declare global {
   interface Window {
     musicAPI: MusicAPI;

@@ -25,6 +25,7 @@ export function App() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [playlist, setPlaylist] = useState<Track[]>([]); // Current playlist for repeat all
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [playlistName, setPlaylistName] = useState<string>(""); // Nombre de la playlist actual
   const [isRestoringTrack, setIsRestoringTrack] = useState(false);
   const [isPreloadingNext, setIsPreloadingNext] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false); // Track if current song is downloading
@@ -32,6 +33,7 @@ export function App() {
   const [savedPosition, setSavedPosition] = useState(0); // Store saved position separately
   const [lastActionTime, setLastActionTime] = useState(0);
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
+  const [importedPlaylists, setImportedPlaylists] = useState<Record<string, Track[]>>({});
 
   // Cargar configuraciones al inicio
   useEffect(() => {
@@ -298,12 +300,36 @@ export function App() {
       
       console.log("🔄 INICIANDO DESCARGA:", track.title);
       
-      if (fromPlaylist) {
-        setPlaylist(fromPlaylist);
-        setCurrentTrackIndex(trackIndex || 0);
+      // GESTIÓN CRÍTICA DE PLAYLIST - Corregido
+      if (fromPlaylist && Array.isArray(fromPlaylist) && fromPlaylist.length > 0) {
+        const safeIndex = trackIndex !== undefined ? trackIndex : fromPlaylist.findIndex(t => t.id === track.id);
+        console.log(`📋 Configurando playlist con ${fromPlaylist.length} canciones, índice: ${safeIndex}`);
+        
+        setPlaylist([...fromPlaylist]); // Crear copia para evitar referencias
+        setCurrentTrackIndex(safeIndex >= 0 ? safeIndex : 0);
+        
+        // Determinar nombre de playlist
+        if (fromPlaylist === searchResults) {
+          setPlaylistName("Resultados de búsqueda");
+        } else {
+          // Buscar en playlists importadas
+          const playlistEntry = Object.entries(importedPlaylists).find(([name, tracks]) => {
+            return tracks.length === fromPlaylist.length && 
+                   tracks.every((t, i) => t.id === fromPlaylist[i]?.id);
+          });
+          setPlaylistName(playlistEntry ? playlistEntry[0] : "Playlist personalizada");
+        }
+        
+        console.log(`🎵 Playlist configurada: "${playlistName}" - Canción ${safeIndex + 1}/${fromPlaylist.length}`);
+      } else {
+        // Playlist de una sola canción
+        console.log("🎵 Canción individual");
+        setPlaylist([track]);
+        setCurrentTrackIndex(0);
+        setPlaylistName("Canción individual");
       }
       
-      // Mantener isDownloading=true durante TODO el proceso
+      // Proceso de descarga
       setIsDownloading(true);
       setSavedPosition(0);
       
@@ -311,7 +337,6 @@ export function App() {
         setTimeout(() => reject(new Error('Download timeout')), 60000);
       });
 
-      // Paso 1: Esperar descarga COMPLETA
       console.log("⏳ Esperando descarga completa...");
       const downloadStart = Date.now();
       
@@ -328,7 +353,6 @@ export function App() {
 
       console.log(`✅ DESCARGA COMPLETADA en ${downloadTime}ms`);
       
-      // Paso 2: Cargar y reproducir audio
       console.log("🎵 Cargando audio...");
       setIsLoadingAudio(true);
       
@@ -338,15 +362,13 @@ export function App() {
       
       console.log(`🔊 AUDIO LISTO en ${audioTime}ms`);
       
-      // Verificar estado DESPUÉS de que todo esté listo
       if (pendingTrackId === track.id) {
         setDuration(musicService.getDuration());
         
-        // CLAVE: Usar un pequeño delay para asegurar sincronización
         setTimeout(() => {
           const finalPlayingState = musicService.isPlaying();
           setIsPlaying(finalPlayingState);
-          console.log(`🎶 ESTADO FINAL: Playing=${finalPlayingState}, Duration=${musicService.getDuration()}s`);
+          console.log(`🎶 ESTADO FINAL: Playing=${finalPlayingState}, Playlist: "${playlistName}" (${currentTrackIndex + 1}/${playlist.length})`);
         }, 100);
       }
       
@@ -411,68 +433,91 @@ export function App() {
   const handleSkipForward = () => {
     const now = Date.now();
     
-    // Debouncing más estricto para skip
     if (now - lastActionTime < 800) {
       console.log("Skip demasiado rápido, ignorando...");
       return;
     }
     
-    // Skip buttons work even during download, just not during pending track selection
-    if (playlist.length === 0 || pendingTrackId) {
-      console.log("No se puede hacer skip:", { 
-        playlistEmpty: playlist.length === 0, 
-        pending: !!pendingTrackId 
-      });
+    if (playlist.length === 0) {
+      console.log("❌ No hay playlist para skip forward");
       return;
     }
+    
+    if (pendingTrackId) {
+      console.log("Hay selección pendiente, esperando...");
+      return;
+    }
+    
+    setLastActionTime(now);
     
     let nextIndex;
     if (isShuffle) {
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
-      if (availableIndexes.length === 0) return;
-      nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      if (availableIndexes.length === 0) {
+        nextIndex = currentTrackIndex;
+      } else {
+        nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      }
     } else {
       nextIndex = (currentTrackIndex + 1) % playlist.length;
     }
     
     const nextTrack = playlist[nextIndex];
     if (nextTrack) {
+      console.log(`⏭️ SKIP FORWARD: De canción ${currentTrackIndex + 1} a ${nextIndex + 1} de ${playlist.length} en "${playlistName}"`);
+      console.log(`🎵 Reproduciendo: "${nextTrack.title}"`);
       handleTrackSelect(nextTrack, playlist, nextIndex);
+    } else {
+      console.error("❌ No se pudo encontrar la siguiente canción");
     }
   };
 
   const handleSkipBack = () => {
     const now = Date.now();
     
-    // Debouncing
     if (now - lastActionTime < 800) {
       console.log("Skip back demasiado rápido, ignorando...");
       return;
     }
     
-    // Skip buttons work even during download, just not during pending track selection
-    if (pendingTrackId) return;
+    if (pendingTrackId) {
+      console.log("Hay selección pendiente, esperando...");
+      return;
+    }
+
+    setLastActionTime(now);
 
     // Si llevamos más de 3 segundos, reiniciar la canción actual
     if (currentTime > 3) {
+      console.log("⏪ Reiniciando canción actual");
       handleSeek(0);
       return;
     }
     
-    if (playlist.length === 0) return;
+    if (playlist.length === 0) {
+      console.log("❌ No hay playlist para skip back");
+      return;
+    }
     
     let prevIndex;
     if (isShuffle) {
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
-      if (availableIndexes.length === 0) return;
-      prevIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      if (availableIndexes.length === 0) {
+        prevIndex = currentTrackIndex;
+      } else {
+        prevIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      }
     } else {
       prevIndex = currentTrackIndex === 0 ? playlist.length - 1 : currentTrackIndex - 1;
     }
     
     const prevTrack = playlist[prevIndex];
     if (prevTrack) {
+      console.log(`⏮️ SKIP BACK: De canción ${currentTrackIndex + 1} a ${prevIndex + 1} de ${playlist.length} en "${playlistName}"`);
+      console.log(`🎵 Reproduciendo: "${prevTrack.title}"`);
       handleTrackSelect(prevTrack, playlist, prevIndex);
+    } else {
+      console.error("❌ No se pudo encontrar la canción anterior");
     }
   };
 
@@ -498,11 +543,11 @@ export function App() {
       />
       
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
+                <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
           <MusicLibrary
-            onTrackSelect={(track) => {
-              const trackIndex = searchResults.findIndex(t => t.id === track.id);
-              handleTrackSelect(track, searchResults, trackIndex);
+            onTrackSelect={(track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
+              console.log(`📱 App recibió selección: "${track.title}" con playlist de ${fromPlaylist?.length || 0} canciones, índice: ${trackIndex}`);
+              handleTrackSelect(track, fromPlaylist, trackIndex);
             }}
             currentView={currentView}
             searchResults={searchResults}
@@ -514,11 +559,29 @@ export function App() {
         
         {currentTrack && (
           <div className="flex flex-col bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 transition-colors">
-            <NowPlaying
-              track={currentTrack}
-              isPlaying={isPlaying}
-              isDownloading={isDownloading}
-            />
+            <div className="relative">
+              <NowPlaying
+                track={currentTrack}
+                isPlaying={isPlaying}
+                isDownloading={isDownloading}
+                playlistInfo={{
+                  name: playlistName,
+                  current: currentTrackIndex + 1,
+                  total: playlist.length
+                }}
+              />
+              
+              {/* Indicador de precarga posicionado absolutamente en la esquina derecha */}
+              {isPreloadingNext && !isDownloading && (
+                <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                  <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-[#2196F3] mr-2"></div>
+                    <span className="whitespace-nowrap">Precargando...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <PlayerControls
               isPlaying={isPlaying}
               onPlayPause={handlePlayPause}
@@ -538,16 +601,6 @@ export function App() {
               isDownloading={isDownloading}
               isLoadingAudio={isLoadingAudio}
             />
-            
-            {/* Mostrar indicador de precarga solo cuando no está descargando la actual */}
-            {isPreloadingNext && !isDownloading && (
-              <div className="px-6 pb-2 flex-shrink-0">
-                <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b border-[#2196F3] mr-2"></div>
-                  Precargando siguiente canción...
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

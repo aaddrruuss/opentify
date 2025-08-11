@@ -216,8 +216,10 @@ interface DownloadRequest {
 class DownloadManager {
   private activeDownloads = new Map<string, Promise<string | null>>();
   private downloadQueue: DownloadRequest[] = [];
-  private maxConcurrentDownloads = 2;
+  private maxConcurrentDownloads = 1; // Reducir a 1 para menor impacto de red
   private activeCount = 0;
+  private lastDownloadTime = 0;
+  private minDelayBetweenDownloads = 2000; // 2 segundos mínimo entre descargas
 
   async queueDownload(videoId: string, title?: string, preload: boolean = false): Promise<string | null> {
     // Si ya hay una descarga activa para este video, esperar a que termine
@@ -276,6 +278,17 @@ class DownloadManager {
         return cachedPath;
       }
 
+      // Implementar rate limiting para reducir carga de red
+      const now = Date.now();
+      const timeSinceLastDownload = now - this.lastDownloadTime;
+      if (timeSinceLastDownload < this.minDelayBetweenDownloads) {
+        const waitTime = this.minDelayBetweenDownloads - timeSinceLastDownload;
+        if (!preload) {
+          console.log(`⏳ Esperando ${waitTime}ms para rate limiting...`);
+        }
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+
       if (!preload) {
         console.log("🔄 INICIANDO DESCARGA:", title || videoId);
       }
@@ -290,20 +303,25 @@ class DownloadManager {
       const finalSongPath = getSongFilePath(videoId, title);
       const tempPath = path.join(songsDir, `${videoId}_${timestamp}_temp.%(ext)s`);
 
+      // Argumentos optimizados para menor uso de ancho de banda
       const args = [
         `https://www.youtube.com/watch?v=${videoId}`,
         "-f", "bestaudio[ext=m4a]/bestaudio/best",
         "-o", tempPath,
         "--extract-audio",
         "--audio-format", "mp3",
-        "--audio-quality", preload ? "7" : "5",
+        "--audio-quality", preload ? "9" : "7", // Menor calidad para reducir ancho de banda
         "--no-playlist",
         "--no-warnings",
-        "--concurrent-fragments", "2",
-        "--retries", "3",
-        "--fragment-retries", "3",
+        "--concurrent-fragments", "1", // Reducir fragmentos concurrentes
+        "--retries", "2", // Reducir reintentos
+        "--fragment-retries", "2",
         "--no-continue",
-        "--no-part"
+        "--no-part",
+        "--socket-timeout", "30", // Timeout más largo para conexiones lentas
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", // User agent para evitar 403
+        "--sleep-interval", "1", // Pausa entre requests
+        "--max-sleep-interval", "3"
       ];
 
       if (process.platform === "win32") {
@@ -311,13 +329,34 @@ class DownloadManager {
       }
 
       const startTime = Date.now();
+      this.lastDownloadTime = startTime;
       
       if (!preload) {
-        console.log("🚀 Ejecutando yt-dlp...");
+        console.log("🚀 Ejecutando yt-dlp con configuración optimizada...");
       }
       
-      // ESPERAR que el proceso termine COMPLETAMENTE
-      await ytDlpWrapInstance.exec(args);
+      try {
+        await ytDlpWrapInstance.exec(args);
+      } catch (ytdlError) {
+        const errorMsg = String(ytdlError);
+        
+        // Manejo específico de errores HTTP 403
+        if (errorMsg.includes('403') || errorMsg.includes('Forbidden')) {
+          console.warn("⚠️ Error HTTP 403 detectado, esperando antes de reintentar...");
+          await new Promise(resolve => setTimeout(resolve, 10000)); // Esperar 10 segundos
+          
+          // Reintento con argumentos alternativos
+          const retryArgs = [
+            ...args,
+            "--add-header", "Referer:https://www.youtube.com/",
+            "--sleep-requests", "2" // Pausa adicional entre requests
+          ];
+          
+          await ytDlpWrapInstance.exec(retryArgs);
+        } else {
+          throw ytdlError;
+        }
+      }
       
       const downloadTime = Date.now() - startTime;
       
@@ -329,7 +368,7 @@ class DownloadManager {
       const tempMp3Path = path.join(songsDir, `${videoId}_${timestamp}_temp.mp3`);
       
       // Esperar un momento adicional para asegurar escritura completa
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
       if (fs.existsSync(tempMp3Path)) {
         const stats = fs.statSync(tempMp3Path);
@@ -339,17 +378,9 @@ class DownloadManager {
           console.log(`📁 Archivo: ${fileSizeKB.toFixed(2)}KB`);
         }
         
-        // Validar tamaño mínimo
-        if (stats.size < 100 * 1024) {
-          console.warn(`⚠️ Archivo pequeño (${fileSizeKB}KB), esperando más...`);
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          
-          if (fs.existsSync(tempMp3Path)) {
-            const newStats = fs.statSync(tempMp3Path);
-            if (!preload) {
-              console.log(`📁 Tamaño final: ${(newStats.size / 1024).toFixed(2)}KB`);
-            }
-          }
+        // Validar tamaño mínimo (reducido para calidad menor)
+        if (stats.size < 50 * 1024) {
+          console.warn(`⚠️ Archivo muy pequeño (${fileSizeKB}KB), posible error`);
         }
         
         // Verificar archivo final existente
@@ -371,7 +402,7 @@ class DownloadManager {
           
           const finalStats = fs.statSync(finalSongPath);
           if (!preload) {
-            console.log(`✅ DESCARGA COMPLETADA: ${path.basename(finalSongPath)} (${(finalStats.size / 1024).toFixed(2)}KB en ${downloadTime}ms)`);
+            console.log(`✅ DESCARGA COMPLETADA: ${path.basename(finalSongPath)} (${(finalStats.size / 1024).toFixed(2)}KB)`);
           }
           
           return finalSongPath;
@@ -385,8 +416,14 @@ class DownloadManager {
 
     } catch (error) {
       this.cleanupTempFiles(videoId);
+      const errorMsg = String(error);
+      
       if (!preload) {
-        console.error("❌ Error descargando:", error);
+        if (errorMsg.includes('403')) {
+          console.error("❌ Error HTTP 403: YouTube está bloqueando las descargas temporalmente");
+        } else {
+          console.error("❌ Error descargando:", errorMsg);
+        }
       }
       throw error;
     }
@@ -488,20 +525,57 @@ async function savePlaylist(playlistName: string, tracks: any[]): Promise<boolea
   }
 }
 
-// Función para descargar las canciones de una playlist en background
+// Función para descargar las canciones de una playlist en background - OPTIMIZADA
 async function downloadPlaylistTracks(playlistName: string, tracks: any[]) {
-  console.log(`📥 Iniciando descarga de ${tracks.length} canciones para "${playlistName}"`);
+  const playlistDir = getPlaylistPath(playlistName);
+  const playlistSongsDir = path.join(playlistDir, 'songs');
   
-  for (let i = 0; i < tracks.length; i++) {
-    const track = tracks[i];
-    try {
-      console.log(`📥 Descargando ${i + 1}/${tracks.length}: ${track.title}`);
-      await downloadManager.queueDownload(track.id, track.title, true); // preload = true
+  // Crear directorio de canciones de la playlist
+  if (!fs.existsSync(playlistSongsDir)) {
+    fs.mkdirSync(playlistSongsDir, { recursive: true });
+  }
+  
+  console.log(`📥 Iniciando descarga optimizada de ${tracks.length} canciones para "${playlistName}"`);
+  
+  // Configuración muy conservadora para playlist
+  const batchSize = 1; // Una canción a la vez
+  const batchDelay = 5000; // 5 segundos entre descargas
+  
+  for (let i = 0; i < tracks.length; i += batchSize) {
+    const batch = tracks.slice(i, i + batchSize);
+    
+    for (const track of batch) {
+      const globalIndex = i + batch.indexOf(track);
       
-      // Pequeño delay entre descargas
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (error) {
-      console.error(`Error descargando ${track.title}:`, error);
+      try {
+        console.log(`📥 Descargando ${globalIndex + 1}/${tracks.length}: ${track.title}`);
+        
+        // Verificar si ya existe en el directorio de la playlist
+        const playlistSongPath = path.join(playlistSongsDir, `${track.id}_${sanitizeFileName(track.title.substring(0, 30))}.mp3`);
+        
+        if (fs.existsSync(playlistSongPath)) {
+          console.log(`✓ Ya existe en playlist: ${track.title}`);
+          continue;
+        }
+        
+        // Intentar descargar con rate limiting
+        const songPath = await downloadManager.queueDownload(track.id, track.title, true);
+        
+        if (songPath && fs.existsSync(songPath)) {
+          try {
+            fs.copyFileSync(songPath, playlistSongPath);
+            console.log(`✓ Copiada a playlist: ${track.title}`);
+          } catch (copyError) {
+            console.warn(`Error copiando ${track.title}:`, copyError);
+          }
+        }
+        
+      } catch (error) {
+        console.error(`Error descargando ${track.title}:`, error);
+      }
+      
+      // Delay entre cada canción individual
+      await new Promise(resolve => setTimeout(resolve, batchDelay));
     }
   }
   
@@ -585,88 +659,115 @@ export function setupIpcHandlers() {
   // Limpiar archivos huérfanos al iniciar
   downloadManager.cleanupOrphanedFiles();
 
-  // Cache simple para búsquedas recientes
-  const searchCache = new Map<string, any[]>();
-  const maxCacheSize = 50;
-  const cacheExpiration = 5 * 60 * 1000; // 5 minutos
+  // Cache más conservador
+  const searchCache = new Map<string, { results: any[], timestamp: number }>();
+  const maxCacheSize = 50; // Mantener cache pequeño
+  const cacheExpiration = 10 * 60 * 1000; // 10 minutos
+
+  // Función para limpiar cache expirado
+  const cleanExpiredCache = () => {
+    const now = Date.now();
+    for (const [key, value] of searchCache.entries()) {
+      if (now - value.timestamp > cacheExpiration) {
+        searchCache.delete(key);
+      }
+    }
+  };
 
   ipcMain.handle("search-music", async (event, query: string) => {
     try {
-      // Verificar cache primero
-      const cacheKey = query.toLowerCase().trim();
-      const cachedResult = searchCache.get(cacheKey);
-      
-      if (cachedResult) {
-        console.log(`Cache hit para: "${query}"`);
-        return cachedResult;
+      // Limpiar cache expirado periódicamente
+      if (Math.random() < 0.1) {
+        cleanExpiredCache();
       }
 
-      console.log(`Buscando en YouTube: "${query}"`);
+      // Verificar cache con timestamp
+      const cacheKey = query.toLowerCase().trim();
+      const cachedEntry = searchCache.get(cacheKey);
       
-      // Usar timeout más robusto para búsquedas
-      const searchPromise = YouTube.search(query, {
-        limit: 30, // Reducir límite para búsquedas más rápidas
-        type: "video",
-      });
-      
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Search timeout')), 10000) // 10 segundos timeout
-      );
-      
-      const videos = await Promise.race([searchPromise, timeoutPromise]);
+      if (cachedEntry && (Date.now() - cachedEntry.timestamp) < cacheExpiration) {
+        console.log(`⚡ Cache hit para: "${query}"`);
+        return cachedEntry.results;
+      }
 
-      // Filtrar y procesar resultados
-      const filteredVideos = videos.filter((video) => {
-        const durationInMilliseconds = video.duration;
+      console.log(`🔍 Buscando en YouTube: "${query}"`);
+      
+      // Timeout conservador y manejo de errores HTTP mejorado
+      let videos;
+      try {
+        const searchPromise = YouTube.search(query, {
+          limit: 15, // Reducir límite para menor carga
+          type: "video",
+        });
         
-        if (!durationInMilliseconds || durationInMilliseconds === 0) {
-          return true;
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Search timeout')), 12000) // 12 segundos
+        );
+        
+        videos = await Promise.race([searchPromise, timeoutPromise]);
+      } catch (searchError) {
+        const errorMsg = String(searchError);
+        console.error(`Error buscando "${query}":`, errorMsg);
+        
+        // Si es un error 403, esperar antes de permitir más búsquedas
+        if (errorMsg.includes('403')) {
+          console.warn("⚠️ Detectado error 403 en búsqueda, implementando cooldown...");
+          await new Promise(resolve => setTimeout(resolve, 5000));
         }
         
-        const durationInSeconds = Math.floor(durationInMilliseconds / 1000);
-        return durationInSeconds <= 900; // 15 minutos max
-      }).slice(0, 20);
+        return [];
+      }
 
-      console.log(`Búsqueda: "${query}" - ${videos.length} encontrados, ${filteredVideos.length} después del filtrado`);
+      // Filtrado y procesamiento más robusto
+      const filteredVideos = videos.filter((video) => {
+        try {
+          const durationInMilliseconds = video.duration;
+          if (!durationInMilliseconds || durationInMilliseconds === 0) return true;
+          const durationInSeconds = Math.floor(durationInMilliseconds / 1000);
+          return durationInSeconds <= 900; // 15 minutos max
+        } catch (filterError) {
+          return false;
+        }
+      }).slice(0, 12); // Reducir resultados
+
+      console.log(`✅ Búsqueda: "${query}" - ${filteredVideos.length} resultados`);
 
       const results = filteredVideos.map((video) => {
-        const videoId = video.id!;
-        const thumbnailOptions = [
-          `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-          `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-          `https://img.youtube.com/vi/${videoId}/default.jpg`
-        ];
+        try {
+          const videoId = video.id!;
+          return {
+            id: videoId,
+            title: video.title || "Sin título",
+            artist: video.channel?.name || "Unknown Artist",
+            duration: video.durationFormatted || "0:00",
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+            cover: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+          };
+        } catch (mapError) {
+          return null;
+        }
+      }).filter(result => result !== null);
 
-        return {
-          id: videoId,
-          title: video.title!,
-          artist: video.channel?.name || "Unknown Artist",
-          duration: video.durationFormatted || "0:00",
-          thumbnail: thumbnailOptions[0],
-          cover: thumbnailOptions[0]
-        };
-      });
-
-      // Guardar en cache
+      // Gestión de cache
       if (searchCache.size >= maxCacheSize) {
-        // Remover el más antiguo
-        const firstKey = searchCache.keys().next().value;
-        if (firstKey) {
-          searchCache.delete(firstKey);
+        const sortedEntries = Array.from(searchCache.entries())
+          .sort((a, b) => a[1].timestamp - b[1].timestamp);
+        
+        for (let i = 0; i < 5; i++) {
+          if (sortedEntries[i]) {
+            searchCache.delete(sortedEntries[i][0]);
+          }
         }
       }
-      searchCache.set(cacheKey, results);
-
-      // Limpiar cache expirado después de un tiempo
-      setTimeout(() => {
-        searchCache.delete(cacheKey);
-      }, cacheExpiration);
+      
+      searchCache.set(cacheKey, {
+        results,
+        timestamp: Date.now()
+      });
 
       return results;
     } catch (error) {
-      console.error("Search error:", error);
-      
-      // Retornar array vacío en lugar de lanzar error para no romper el proceso
+      console.error("Error crítico en búsqueda:", error);
       return [];
     }
   });

@@ -5,7 +5,7 @@ import { Track } from "../types/index";
 import { SearchIcon, Upload } from "lucide-react";
 
 interface MusicLibraryProps {
-  onTrackSelect: (track: Track) => void;
+  onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
   currentView: string;
   searchResults: Track[];
   onSearch: (query: string) => void;
@@ -277,9 +277,10 @@ export function MusicLibrary({
                         </div>
                         <button
                           onClick={() => {
-                            // Play first track from playlist
+                            // IMPORTANTE: Pasar toda la playlist y el índice correcto
                             if (tracks.length > 0) {
-                              onTrackSelect(tracks[0]);
+                              console.log(`🎵 Reproduciendo playlist "${name}" con ${tracks.length} canciones`);
+                              onTrackSelect(tracks[0], tracks, 0);
                             }
                           }}
                           className="px-3 py-1 text-sm bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
@@ -291,7 +292,12 @@ export function MusicLibrary({
                     <div className="max-h-64 overflow-y-auto">
                       <TrackList
                         tracks={tracks}
-                        onTrackSelect={onTrackSelect}
+                        onTrackSelect={(track) => {
+                          // CRÍTICO: Encontrar índice correcto en la playlist y pasar toda la información
+                          const trackIndex = tracks.findIndex(t => t.id === track.id);
+                          console.log(`🎯 Seleccionando canción ${trackIndex + 1}/${tracks.length} de "${name}": ${track.title}`);
+                          onTrackSelect(track, tracks, trackIndex);
+                        }}
                         compact
                       />
                     </div>
