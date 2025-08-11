@@ -238,8 +238,16 @@ export function App() {
         downloadTimeout
       ]);
       
+      // **NUEVO: Si getSongPath retorna null (restricción de edad), manejar silenciosamente**
       if (!songPath) {
-        throw new Error("No se pudo descargar la canción");
+        console.warn(`🔞 Canción omitida por restricción de edad: ${track.title}`);
+        
+        // Recargar playlists para reflejar cambios
+        setTimeout(() => {
+          window.location.reload(); // Forzar recarga completa para actualizar UI
+        }, 1000);
+        
+        return; // Salir silenciosamente
       }
       
       setIsLoadingAudio(true);
@@ -255,6 +263,20 @@ export function App() {
       }
       
     } catch (error) {
+      const errorMsg = String(error);
+      
+      // **NUEVO: No mostrar error si es restricción de edad**
+      if (errorMsg.includes('AGE_RESTRICTED') || errorMsg.includes('sign in to confirm')) {
+        console.warn(`🔞 Canción con restricción de edad omitida automáticamente: ${track.title}`);
+        
+        // Recargar playlists para reflejar cambios
+        setTimeout(() => {
+          window.location.reload(); // Forzar recarga completa
+        }, 1000);
+        
+        return; // No mostrar error
+      }
+      
       console.error('Error:', error);
       setIsPlaying(false);
     } finally {

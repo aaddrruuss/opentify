@@ -216,6 +216,55 @@ export const MusicLibrary = memo(({
     }
   }, []);
 
+  // NUEVO: Función para recargar playlists cuando se eliminan canciones
+  const reloadPlaylists = useCallback(async () => {
+    try {
+      setPlaylistsLoaded(false);
+      
+      const playlistNames = await window.playlistAPI.getPlaylists();
+      const playlists: {[key: string]: Track[]} = {};
+      
+      for (const name of playlistNames) {
+        try {
+          const tracks = await window.playlistAPI.loadPlaylist(name);
+          playlists[name] = tracks;
+        } catch (error) {
+          console.error(`Error loading playlist ${name}:`, error);
+        }
+      }
+      
+      setImportedPlaylists(playlists);
+      setPlaylistsLoaded(true);
+      
+      console.log(`🔄 Playlists recargadas después de eliminar canciones con restricción: ${playlistNames.length} playlists`);
+    } catch (error) {
+      console.error("Error recargando playlists:", error);
+      setPlaylistsLoaded(true);
+    }
+  }, []);
+
+  // MEJORADO: Escuchar cambios en playlists y recargar automáticamente
+  useEffect(() => {
+    const handlePlaylistChanges = () => {
+      console.log('🔄 Detectados cambios en playlists, recargando...');
+      reloadPlaylists();
+    };
+
+    // Recargar playlists cada 5 segundos si hay cambios pendientes
+    const intervalId = setInterval(() => {
+      if (currentView === "playlists" && playlistsLoaded) {
+        // Solo recargar ocasionalmente para detectar cambios
+        if (Math.random() < 0.1) { // 10% de probabilidad cada 5 segundos
+          reloadPlaylists();
+        }
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentView, playlistsLoaded, reloadPlaylists]);
+
   // Memoizar contenido pesado
   const playlistsContent = useMemo(() => {
     if (currentView !== "playlists") return null;

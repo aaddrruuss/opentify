@@ -225,7 +225,7 @@ class BackgroundImportManager {
     console.log("✅ Procesamiento de cola completado");
   }
 
-  // Procesar una tarea individual - CORREGIDO COMPLETAMENTE
+  // Procesar una tarea individual - CON MANEJO DE RESTRICCIÓN DE EDAD
   private async processTask(task: ImportTask) {
     console.log(`🎵 Procesando tarea: ${task.playlistName} (${task.processedTracks}/${task.totalTracks})`);
     
@@ -233,7 +233,7 @@ class BackgroundImportManager {
     const batchDelay = 2000; // 2 segundos entre canciones
     const searchTimeout = 12000; // 12 segundos timeout
     
-    // NUEVO: Verificar qué canciones ya fueron procesadas exitosamente
+    // Verificar qué canciones ya fueron procesadas exitosamente
     let actualProcessedCount = 0;
     for (let i = 0; i < task.processedResults.length; i++) {
       if (task.processedResults[i].status === 'found' || task.processedResults[i].status === 'not_found') {
@@ -280,14 +280,30 @@ class BackgroundImportManager {
         const bestMatch = this.findBestMatch(searchResults, trackData.durationMs);
         
         if (bestMatch) {
-          trackData.matchedTrack = {
-            ...bestMatch,
-            title: trackData.trackName,
-            artist: trackData.artistName
-          };
-          trackData.status = 'found';
-          task.foundTracks++;
-          console.log(`✅ [${i + 1}/${task.totalTracks}] Encontrada: ${trackData.trackName}`);
+          // **NUEVO: Verificar que el video se puede descargar**
+          try {
+            await this.verifyVideoAvailability(bestMatch.id, bestMatch.title);
+            
+            trackData.matchedTrack = {
+              ...bestMatch,
+              title: trackData.trackName,
+              artist: trackData.artistName
+            };
+            trackData.status = 'found';
+            task.foundTracks++;
+            console.log(`✅ [${i + 1}/${task.totalTracks}] Encontrada: ${trackData.trackName}`);
+          } catch (verifyError) {
+            const errorMsg = String(verifyError);
+            
+            if (errorMsg.includes('AGE_RESTRICTED')) {
+              console.warn(`🔞 [${i + 1}/${task.totalTracks}] Restricción de edad - ELIMINANDO: ${trackData.trackName}`);
+              trackData.status = 'not_found';
+              // La canción será omitida de la playlist final
+            } else {
+              console.warn(`⚠️ [${i + 1}/${task.totalTracks}] Error verificando video: ${errorMsg}`);
+              trackData.status = 'not_found';
+            }
+          }
         } else {
           trackData.status = 'not_found';
           console.log(`⚠️ [${i + 1}/${task.totalTracks}] No encontrada: ${trackData.trackName}`);
@@ -298,7 +314,7 @@ class BackgroundImportManager {
         console.error(`❌ Error buscando "${trackData.trackName}":`, error);
       }
       
-      // Actualizar progreso CORRECTAMENTE
+      // Actualizar progreso
       task.processedTracks = i + 1;
       this.saveTasks();
       this.notifyFrontend('task-updated', task);
@@ -314,7 +330,7 @@ class BackgroundImportManager {
     task.completedAt = Date.now();
     task.currentTrack = '';
     
-    // Guardar playlist completa
+    // Guardar playlist completa (las canciones con restricción de edad serán omitidas automáticamente)
     await this.saveCompletePlaylist(task);
     
     this.saveTasks();
@@ -324,6 +340,30 @@ class BackgroundImportManager {
     this.showCompletionNotification(task);
     
     console.log(`🎉 Tarea completada: ${task.playlistName} (${task.foundTracks}/${task.totalTracks} encontradas)`);
+  }
+
+  // **NUEVA FUNCIÓN: Verificar disponibilidad del video**
+  private async verifyVideoAvailability(videoId: string, title: string): Promise<void> {
+    try {
+      // Intentar una descarga de prueba muy rápida para verificar disponibilidad
+      const testResult = await window.musicAPI?.getSongPath(videoId, title, true);
+      
+      if (!testResult) {
+        throw new Error("Video no disponible");
+      }
+      
+      console.log(`✓ Video verificado: ${title}`);
+    } catch (error) {
+      const errorMsg = String(error);
+      
+      // Si es restricción de edad, propagar el error específico
+      if (errorMsg.includes('AGE_RESTRICTED')) {
+        throw new Error(`AGE_RESTRICTED: ${title}`);
+      }
+      
+      // Para otros errores, también lanzar
+      throw error;
+    }
   }
 
   // Construir query de búsqueda optimizada
@@ -366,32 +406,35 @@ class BackgroundImportManager {
     }));
   }
 
-  // Encontrar mejor coincidencia por duración
+  // Encontrar mejor coincidencia por duración - MEJORADO para restricción de edad
   private findBestMatch(searchResults: any[], targetDurationMs: number): any | null {
     if (searchResults.length === 0) return null;
     
-    let bestMatch = searchResults[0];
-    let smallestDifference = Infinity;
+    // Ordenar por diferencia de duración
+    const sortedResults = searchResults
+      .map(track => {
+        const durationParts = track.duration.split(':');
+        if (durationParts.length !== 2) return null;
+        
+        const minutes = parseInt(durationParts[0]) || 0;
+        const seconds = parseInt(durationParts[1]) || 0;
+        const trackDurationMs = (minutes * 60 + seconds) * 1000;
+        
+        const difference = Math.abs(trackDurationMs - targetDurationMs);
+        
+        return { ...track, durationMs: trackDurationMs, difference };
+      })
+      .filter(track => track !== null)
+      .sort((a, b) => a.difference - b.difference);
     
-    for (const track of searchResults) {
-      const durationParts = track.duration.split(':');
-      if (durationParts.length !== 2) continue;
-      
-      const minutes = parseInt(durationParts[0]) || 0;
-      const seconds = parseInt(durationParts[1]) || 0;
-      const trackDurationMs = (minutes * 60 + seconds) * 1000;
-      
-      const difference = Math.abs(trackDurationMs - targetDurationMs);
-      
-      if (difference < smallestDifference) {
-        smallestDifference = difference;
-        bestMatch = track;
-      }
-    }
+    // Tomar los 3 mejores candidatos por duración
+    const topCandidates = sortedResults.slice(0, 3);
     
-    // Ser más permisivo: hasta 2 minutos de diferencia
+    // Devolver el mejor candidato (el sistema de descarga se encargará de los errores de edad)
     const maxDifference = 120000; // 2 minutos
-    return smallestDifference <= maxDifference ? bestMatch : null;
+    return topCandidates.length > 0 && topCandidates[0].difference <= maxDifference 
+      ? topCandidates[0] 
+      : null;
   }
 
   // Guardar playlist parcial

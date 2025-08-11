@@ -132,8 +132,7 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
       }
     }
     
-    // Solo retornar si la diferencia es menor a 60 segundos (60000ms)
-    // Esto es más permisivo para compensar diferencias en versiones
+    // Solo retornar si la diferencia es menor a 60 segundos
     return smallestDifference <= 60000 ? bestMatch : null;
   };
 
@@ -187,7 +186,7 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
     }
   };
 
-  // Método de importación anterior como fallback
+  // Método de importación anterior como fallback - CON MANEJO DE EDAD
   const processImportLegacy = async (spotifyTracks: SpotifyTrack[]) => {
     console.log(`🔄 Usando método de importación legacy para ${spotifyTracks.length} canciones`);
     
@@ -229,25 +228,60 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
             // Encontrar mejor coincidencia
             const bestMatch = findBestMatchByDuration(searchResults, track.durationMs);
             
-            // Actualizar resultado
-            setImportedTracks(prev => {
-              const updated = [...prev];
-              if (bestMatch) {
-                updated[globalIndex] = {
-                  ...updated[globalIndex],
-                  status: 'found',
-                  matchedTrack: bestMatch,
-                  searchResults
-                };
-              } else {
-                updated[globalIndex] = {
-                  ...updated[globalIndex],
-                  status: 'not_found',
-                  searchResults
-                };
+            if (bestMatch) {
+              // **NUEVO: Verificar que el video no tiene restricción de edad**
+              try {
+                await window.musicAPI.getSongPath(bestMatch.id, bestMatch.title, true);
+                
+                // Si llegamos aquí, el video es válido
+                setImportedTracks(prev => {
+                  const updated = [...prev];
+                  updated[globalIndex] = {
+                    ...updated[globalIndex],
+                    status: 'found',
+                    matchedTrack: bestMatch,
+                    searchResults
+                  };
+                  return updated;
+                });
+                
+                console.log(`✅ Canción válida: ${track.trackName}`);
+              } catch (verifyError) {
+                const errorMsg = String(verifyError);
+                
+                if (errorMsg.includes('AGE_RESTRICTED') || errorMsg.includes('sign in to confirm')) {
+                  console.warn(`🔞 Restricción de edad - Omitiendo: ${track.trackName}`);
+                  setImportedTracks(prev => {
+                    const updated = [...prev];
+                    updated[globalIndex] = {
+                      ...updated[globalIndex],
+                      status: 'not_found' // Marcar como no encontrada
+                    };
+                    return updated;
+                  });
+                } else {
+                  // Otros errores, también marcar como no encontrada
+                  setImportedTracks(prev => {
+                    const updated = [...prev];
+                    updated[globalIndex] = {
+                      ...updated[globalIndex],
+                      status: 'not_found'
+                    };
+                    return updated;
+                  });
+                }
               }
-              return updated;
-            });
+            } else {
+              // No hay coincidencia por duración
+              setImportedTracks(prev => {
+                const updated = [...prev];
+                updated[globalIndex] = {
+                  ...updated[globalIndex],
+                  status: 'not_found'
+                };
+                return updated;
+              });
+            }
             
           } catch (error) {
             console.error(`Error processing ${track.trackName}:`, error);

@@ -105,6 +105,17 @@ class MusicService {
       }
       
     } catch (error) {
+      const errorMsg = String(error);
+      
+      // **NUEVO: Manejar error de restricción de edad sin mostrar error**
+      if (errorMsg.includes('AGE_RESTRICTED') || errorMsg.includes('sign in to confirm')) {
+        console.warn(`🔞 Canción con restricción de edad eliminada automáticamente: ${track.title}`);
+        
+        // NO lanzar error, solo log silencioso
+        this.cleanup();
+        return; // Salir silenciosamente
+      }
+      
       console.error("MusicService: Error en play:", error);
       this.cleanup();
       throw error;
