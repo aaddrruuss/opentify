@@ -32,3 +32,28 @@ contextBridge.exposeInMainWorld("playlistAPI", {
   savePlaylistImage: (playlistName: string, imageData: string) => ipcRenderer.invoke("save-playlist-image", playlistName, imageData),
   loadPlaylistImage: (playlistName: string) => ipcRenderer.invoke("load-playlist-image", playlistName),
 });
+
+const importManagerAPI = {
+  createTask: (playlistName: string, tracks: any[]) => 
+    ipcRenderer.invoke('import-manager-create-task', playlistName, tracks),
+  getTasks: () => 
+    ipcRenderer.invoke('import-manager-get-tasks'),
+  pauseTask: (taskId: string) => 
+    ipcRenderer.invoke('import-manager-pause-task', taskId),
+  resumeTask: (taskId: string) => 
+    ipcRenderer.invoke('import-manager-resume-task', taskId),
+  cancelTask: (taskId: string, savePartial: boolean) => 
+    ipcRenderer.invoke('import-manager-cancel-task', taskId, savePartial),
+};
+
+const electronAPI = {
+  on: (channel: string, listener: (...args: any[]) => void) => {
+    ipcRenderer.on(channel, listener);
+  },
+  removeListener: (channel: string, listener: (...args: any[]) => void) => {
+    ipcRenderer.removeListener(channel, listener);
+  },
+};
+
+contextBridge.exposeInMainWorld('importManagerAPI', importManagerAPI);
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);

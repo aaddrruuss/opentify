@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   HomeIcon,
   SearchIcon,
@@ -7,7 +7,9 @@ import {
   HeartIcon,
   MoonIcon,
   SunIcon,
+  Download,
 } from 'lucide-react'
+import { ImportManagerPopup } from './ImportManagerPopup';
 
 interface SidebarProps {
   currentView: string;
@@ -16,7 +18,12 @@ interface SidebarProps {
   toggleDarkMode: () => void;
 }
 
-export function Sidebar({ currentView, setCurrentView, isDarkMode, toggleDarkMode }: SidebarProps) {
+export function Sidebar({ 
+  currentView, 
+  setCurrentView, 
+  isDarkMode, 
+  toggleDarkMode 
+}: SidebarProps) {
   const menuItems = [
     {
       id: 'home',
@@ -44,8 +51,41 @@ export function Sidebar({ currentView, setCurrentView, isDarkMode, toggleDarkMod
       icon: HeartIcon,
     },
   ]
+  const [activeImports, setActiveImports] = useState(0);
+  const [showImportManager, setShowImportManager] = useState(false);
+
+  // Escuchar actualizaciones de importaciones
+  useEffect(() => {
+    const updateImportCount = async () => {
+      try {
+        if (window.importManagerAPI) {
+          const tasks = await window.importManagerAPI.getTasks();
+          setActiveImports(tasks.length);
+        }
+      } catch (error) {
+        console.error("Error obteniendo tareas de importación:", error);
+      }
+    };
+
+    updateImportCount();
+
+    const handleImportUpdate = () => {
+      updateImportCount();
+    };
+
+    if (window.electronAPI) {
+      window.electronAPI.on('import-manager', handleImportUpdate);
+      
+      return () => {
+        if (window.electronAPI) {
+          window.electronAPI.removeListener('import-manager', handleImportUpdate);
+        }
+      };
+    }
+  }, []);
+
   return (
-    <div className="w-64 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+    <div className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full">
       <div className="p-6">
         <h1 className="text-2xl font-bold text-[#2196F3]">Music Player</h1>
       </div>
@@ -80,6 +120,31 @@ export function Sidebar({ currentView, setCurrentView, isDarkMode, toggleDarkMod
           Install App
         </button>
       </div>
+
+      {/* Import Manager Button - Solo mostrar si hay importaciones activas */}
+      {activeImports > 0 && (
+        <div className="px-4 mb-4">
+          <button
+            onClick={() => setShowImportManager(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+          >
+            <Download className="h-5 w-5" />
+            <span className="flex-1">Importaciones activas</span>
+            <span className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-xs font-semibold">
+              {activeImports}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* ...existing code... */}
+      
+      {showImportManager && (
+        <ImportManagerPopup 
+          isOpen={showImportManager}
+          onClose={() => setShowImportManager(false)}
+        />
+      )}
     </div>
-  )
+  );
 }

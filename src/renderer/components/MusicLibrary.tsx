@@ -83,10 +83,36 @@ export const MusicLibrary = memo(({
   }, [inputValue, onSearch]);
 
   const handleImportComplete = useCallback(async (tracks: Track[], playlistName: string) => {
-    setImportedPlaylists(prev => ({
-      ...prev,
-      [playlistName]: tracks
-    }));
+    // Si hay canciones, actualizar inmediatamente
+    if (tracks.length > 0) {
+      setImportedPlaylists(prev => ({
+        ...prev,
+        [playlistName]: tracks
+      }));
+    }
+    
+    // Siempre recargar las playlists para capturar las importaciones en segundo plano
+    setTimeout(async () => {
+      try {
+        const playlistNames = await window.playlistAPI.getPlaylists();
+        const playlists: {[key: string]: Track[]} = {};
+        
+        for (const name of playlistNames) {
+          try {
+            const playlistTracks = await window.playlistAPI.loadPlaylist(name);
+            playlists[name] = playlistTracks;
+          } catch (error) {
+            console.error(`Error loading playlist ${name}:`, error);
+          }
+        }
+        
+        setImportedPlaylists(playlists);
+        console.log(`🔄 Playlists recargadas después de importación`);
+      } catch (error) {
+        console.error("Error recargando playlists:", error);
+      }
+    }, 2000); // Delay de 2 segundos para dar tiempo a que se procese
+    
     setShowImportModal(false);
   }, []);
 

@@ -138,123 +138,138 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
   };
 
   const processImport = async () => {
-    if (!csvFile) return;
-    
-    setIsProcessing(true);
-    setShowResults(true);
+    if (!csvFile || !playlistName.trim()) return;
     
     try {
+      setIsProcessing(true);
+      
       const csvText = await csvFile.text();
       const spotifyTracks = parseCsv(csvText);
       
-      const tracksToProcess: ImportedTrack[] = spotifyTracks.map(track => ({
-        ...track,
-        status: 'pending'
-      }));
-      
-      console.log(`🚀 IMPORTACIÓN ROBUSTA: Procesando ${tracksToProcess.length} canciones`);
-      setImportedTracks(tracksToProcess);
-      
-      // Configuración más conservadora para reducir ancho de banda
-      const batchSize = 2; // Reducir a 2 para menor consumo
-      const batchDelay = 3000; // Aumentar delay a 3 segundos
-      const searchTimeout = 15000; // Aumentar timeout a 15 segundos
-      const maxRetries = 1; // Reducir reintentos para evitar spam
-      
-      for (let i = 0; i < tracksToProcess.length; i += batchSize) {
-        const batch = tracksToProcess.slice(i, i + batchSize);
-        const batchNum = Math.floor(i/batchSize) + 1;
-        const totalBatches = Math.ceil(tracksToProcess.length / batchSize);
-        
-        console.log(`📦 Lote ${batchNum}/${totalBatches} - Procesando ${batch.length} canciones (modo conservador)`);
-        
-        // Procesar secuencialmente para reducir carga de red
-        for (const track of batch) {
-          const globalIndex = i + batch.indexOf(track);
-          setCurrentProcessing(globalIndex);
-          
-          track.status = 'searching';
-          setImportedTracks([...tracksToProcess]);
-          
-          let retryCount = 0;
-          let searchSuccessful = false;
-          
-          while (retryCount < maxRetries && !searchSuccessful) {
-            try {
-              // Query más limpia y simple
-              const cleanTitle = track.trackName.replace(/[^\w\s]/g, '').trim();
-              const mainArtist = track.artistName.split(',')[0].split('&')[0].split('feat')[0].trim();
-              const searchQuery = `${mainArtist} ${cleanTitle}`.substring(0, 50);
-              
-              console.log(`🔍 [${globalIndex + 1}/${tracksToProcess.length}] "${searchQuery}"`);
-              
-              // Búsqueda con timeout y manejo de errores HTTP
-              const searchPromise = window.musicAPI.searchMusic(searchQuery);
-              const timeoutPromise = new Promise<Track[]>((_, reject) => 
-                setTimeout(() => reject(new Error('Search timeout')), searchTimeout)
-              );
-              
-              const searchResults = await Promise.race([searchPromise, timeoutPromise]);
-              track.searchResults = searchResults;
-              
-              // Si llegamos aquí, la búsqueda fue exitosa
-              searchSuccessful = true;
-              
-              // Buscar la mejor coincidencia
-              const bestMatch = findBestMatchByDuration(searchResults, track.durationMs);
-              
-              if (bestMatch) {
-                track.matchedTrack = {
-                  ...bestMatch,
-                  title: track.trackName,
-                  artist: track.artistName
-                };
-                track.status = 'found';
-                console.log(`✅ [${globalIndex + 1}/${tracksToProcess.length}] Encontrada`);
-              } else {
-                track.status = 'not_found';
-                console.log(`⚠️ [${globalIndex + 1}/${tracksToProcess.length}] Sin coincidencia`);
-              }
-              
-            } catch (error) {
-              retryCount++;
-              const errorMsg = error instanceof Error ? error.message : String(error);
-              console.error(`💥 Error intento ${retryCount}: ${errorMsg}`);
-              
-              if (retryCount < maxRetries) {
-                // Esperar más tiempo si es un error HTTP
-                const waitTime = errorMsg.includes('403') ? 5000 : 2000;
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-              } else {
-                track.status = 'not_found';
-                console.error(`❌ Falló definitivamente: ${track.trackName}`);
-              }
-            }
-          }
-          
-          setImportedTracks([...tracksToProcess]);
-          
-          // Pequeño delay entre canciones individuales
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-        // Delay más largo entre lotes
-        if (i + batchSize < tracksToProcess.length) {
-          console.log(`⏸️ Pausa de ${batchDelay/1000}s para reducir carga de red...`);
-          await new Promise(resolve => setTimeout(resolve, batchDelay));
-        }
+      if (spotifyTracks.length === 0) {
+        console.error("No se encontraron canciones válidas en el CSV");
+        setIsProcessing(false);
+        return;
       }
       
-      const foundCount = tracksToProcess.filter(t => t.status === 'found').length;
-      const notFoundCount = tracksToProcess.filter(t => t.status === 'not_found').length;
-      console.log(`🏁 IMPORTACIÓN COMPLETADA: ${foundCount} encontradas, ${notFoundCount} no encontradas`);
+      console.log(`🚀 CREANDO TAREA DE IMPORTACIÓN: ${spotifyTracks.length} canciones`);
+      
+      // Verificar que la API esté disponible
+      if (!window.importManagerAPI) {
+        console.error("ImportManagerAPI no está disponible");
+        // Fallback al método anterior
+        await processImportLegacy(spotifyTracks);
+        return;
+      }
+      
+      // Crear tarea en segundo plano
+      const taskId = await window.importManagerAPI.createTask(playlistName, spotifyTracks);
+      
+      console.log(`✅ Tarea creada: ${taskId}`);
+      
+      // Mostrar mensaje de confirmación
+      alert(`¡Importación iniciada en segundo plano!\n\nPlaylist: "${playlistName}"\nCanciones: ${spotifyTracks.length}\n\nPuedes seguir usando la aplicación mientras se procesan las canciones. Recibirás una notificación cuando termine.`);
+      
+      // Cerrar modal
+      onImportComplete([], playlistName);
       
     } catch (error) {
-      console.error('Error crítico procesando CSV:', error);
+      console.error('Error creando tarea de importación:', error);
+      
+      // Si falla el nuevo sistema, usar el método anterior
+      try {
+        const csvText = await csvFile.text();
+        const spotifyTracks = parseCsv(csvText);
+        await processImportLegacy(spotifyTracks);
+      } catch (fallbackError) {
+        console.error('Error en fallback:', fallbackError);
+        alert('Error al importar la playlist. Por favor, inténtalo de nuevo.');
+      }
     } finally {
       setIsProcessing(false);
-      setCurrentProcessing(-1);
     }
+  };
+
+  // Método de importación anterior como fallback
+  const processImportLegacy = async (spotifyTracks: SpotifyTrack[]) => {
+    console.log(`🔄 Usando método de importación legacy para ${spotifyTracks.length} canciones`);
+    
+    const processedTracks: ImportedTrack[] = spotifyTracks.map(track => ({
+      ...track,
+      status: 'pending' as const
+    }));
+    
+    setImportedTracks(processedTracks);
+    setShowResults(true);
+    
+    // Procesar canciones de 5 en 5 con delay
+    const batchSize = 5;
+    const batchDelay = 2000; // 2 segundos entre lotes
+    
+    for (let i = 0; i < processedTracks.length; i += batchSize) {
+      const batch = processedTracks.slice(i, i + batchSize);
+      
+      // Procesar lote en paralelo
+      await Promise.all(
+        batch.map(async (track, batchIndex) => {
+          const globalIndex = i + batchIndex;
+          setCurrentProcessing(globalIndex);
+          
+          try {
+            // Actualizar estado a 'searching'
+            setImportedTracks(prev => {
+              const updated = [...prev];
+              updated[globalIndex] = { ...updated[globalIndex], status: 'searching' };
+              return updated;
+            });
+            
+            // Construir query de búsqueda
+            const searchQuery = `${track.artistName} ${track.trackName}`.substring(0, 50);
+            
+            // Buscar en YouTube
+            const searchResults = await searchForImport(searchQuery);
+            
+            // Encontrar mejor coincidencia
+            const bestMatch = findBestMatchByDuration(searchResults, track.durationMs);
+            
+            // Actualizar resultado
+            setImportedTracks(prev => {
+              const updated = [...prev];
+              if (bestMatch) {
+                updated[globalIndex] = {
+                  ...updated[globalIndex],
+                  status: 'found',
+                  matchedTrack: bestMatch,
+                  searchResults
+                };
+              } else {
+                updated[globalIndex] = {
+                  ...updated[globalIndex],
+                  status: 'not_found',
+                  searchResults
+                };
+              }
+              return updated;
+            });
+            
+          } catch (error) {
+            console.error(`Error processing ${track.trackName}:`, error);
+            setImportedTracks(prev => {
+              const updated = [...prev];
+              updated[globalIndex] = { ...updated[globalIndex], status: 'not_found' };
+              return updated;
+            });
+          }
+        })
+      );
+      
+      // Delay entre lotes
+      if (i + batchSize < processedTracks.length) {
+        await new Promise(resolve => setTimeout(resolve, batchDelay));
+      }
+    }
+    
+    console.log(`✅ Importación legacy completada`);
   };
 
   // Algoritmo de matching MÁS PERMISIVO para acelerar
@@ -509,3 +524,4 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
     </div>
   );
 }
+

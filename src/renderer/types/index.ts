@@ -49,10 +49,41 @@ export interface MusicLibraryProps {
   searchQuery: string;
 }
 
+interface ImportManagerAPI {
+  createTask: (playlistName: string, tracks: SpotifyTrack[]) => Promise<string>;
+  getTasks: () => Promise<ImportTask[]>;
+  pauseTask: (taskId: string) => Promise<boolean>;
+  resumeTask: (taskId: string) => Promise<boolean>;
+  cancelTask: (taskId: string, savePartial: boolean) => Promise<boolean>;
+}
+
+interface SpotifyTrack {
+  trackName: string;
+  artistName: string;
+  durationMs: number;
+}
+
+interface ImportTask {
+  id: string;
+  playlistName: string;
+  totalTracks: number;
+  processedTracks: number;
+  foundTracks: number;
+  currentTrack: string;
+  status: 'running' | 'paused' | 'completed' | 'cancelled';
+  createdAt: number;
+  completedAt?: number;
+}
+
 declare global {
   interface Window {
     musicAPI: MusicAPI;
     settingsAPI: SettingsAPI;
     playlistAPI: PlaylistAPI;
+    importManagerAPI?: ImportManagerAPI;
+    electronAPI?: {
+      on: (channel: string, listener: (...args: any[]) => void) => void;
+      removeListener: (channel: string, listener: (...args: any[]) => void) => void;
+    };
   }
 }
