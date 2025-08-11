@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import path from "path";
-import { setupIpcHandlers } from "./ipcHandlers";
+import { setupIpcHandlers } from './ipcHandlers';
 import { setupImportManagerHandlers, importManager } from './importManager';
 
 let mainWindow: BrowserWindow | null = null;
@@ -41,7 +41,40 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "../index.html"));
 
-  // Configurar import manager con la ventana
+  // FIXED: Asegurar que los handlers se registren correctamente
+  console.log("🔧 Registrando handlers de IPC...");
+  
+  try {
+    setupIpcHandlers();
+    console.log("✅ Handlers básicos registrados");
+    
+    // NUEVO: Configurar calidad de audio desde las configuraciones guardadas
+    setTimeout(async () => {
+      try {
+        const { loadSettings } = require('./ipcHandlers');
+        const settings = loadSettings();
+        if (settings.audioQuality) {
+          // Configurar la calidad de audio desde las configuraciones guardadas
+          mainWindow?.webContents.send('set-initial-audio-quality', settings.audioQuality);
+          console.log(`🎵 Calidad de audio inicial configurada: ${settings.audioQuality}`);
+        }
+      } catch (error) {
+        console.error("Error configurando calidad inicial:", error);
+      }
+    }, 1000);
+    
+  } catch (error) {
+    console.error("❌ Error registrando handlers básicos:", error);
+  }
+
+  try {
+    setupImportManagerHandlers();
+    console.log("✅ Handlers de import manager registrados");
+  } catch (error) {
+    console.error("❌ Error registrando handlers de import manager:", error);
+  }
+
+  // Configurar el import manager con la ventana principal
   importManager.setMainWindow(mainWindow);
 
   // Mostrar ventana solo cuando esté lista
@@ -76,8 +109,6 @@ app.whenReady().then(() => {
   app.setAppUserModelId('com.yourname.musicplayer');
   
   createWindow();
-  setupIpcHandlers();
-  setupImportManagerHandlers(); // Agregar esta línea
 });
 
 app.on("before-quit", () => {

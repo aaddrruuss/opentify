@@ -368,3 +368,32 @@ body {
     opacity: 0.7;
   }
 }
+
+/* NUEVO: Estilos para el indicador sutil de compresión */
+.compression-indicator {
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+}
+
+.compression-indicator:hover {
+  transform: translateY(-1px);
+}
+
+/* Animación suave para la barra de progreso */
+.compression-progress-bar {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Indicador de pulso para el estado de compresión */
+@keyframes compression-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.compression-pulse {
+  animation: compression-pulse 2s ease-in-out infinite;
+}

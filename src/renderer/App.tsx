@@ -57,6 +57,17 @@ export function App() {
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   const [importedPlaylists, setImportedPlaylists] = useState<Record<string, Track[]>>({});
   
+  // NUEVO: Estados globales para compresión
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState<{
+    processed: number;
+    total: number;
+    current: string;
+    success: number;
+    failed: number;
+  } | null>(null);
+  const [compressionResult, setCompressionResult] = useState<string | null>(null);
+
   // Funciones memoizadas para mejor rendimiento
   const throttledTimeUpdate = useMemo(
     () => throttle((time: number) => {
@@ -604,6 +615,12 @@ export function App() {
             searchQuery={searchQuery}
             isDarkMode={isDarkMode}
             onToggleDarkMode={toggleDarkMode}
+            // NUEVO: Props para compresión
+            isCompressing={isCompressing}
+            setIsCompressing={setIsCompressing}
+            compressionProgress={compressionProgress}
+            compressionResult={compressionResult}
+            setCompressionResult={setCompressionResult}
           />
         </main>
         

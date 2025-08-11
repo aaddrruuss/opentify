@@ -24,11 +24,37 @@ export const MusicLibrary = memo(({
   searchQuery,
   isDarkMode,
   onToggleDarkMode,
+  // NUEVO: Props para compresión
+  isCompressing,
+  setIsCompressing,
+  compressionProgress,
+  compressionResult,
+  setCompressionResult,
 }: MusicLibraryProps & { 
   isDarkMode: boolean; 
-  onToggleDarkMode: (darkMode: boolean) => void; 
+  onToggleDarkMode: (darkMode: boolean) => void;
+  // NUEVO: Props de compresión
+  isCompressing: boolean;
+  setIsCompressing: (value: boolean) => void;
+  compressionProgress: {
+    processed: number;
+    total: number;
+    current: string;
+    success: number;
+    failed: number;
+  } | null;
+  compressionResult: string | null;
+  setCompressionResult: (value: string | null) => void;
 }) => {
   const [inputValue, setInputValue] = useState("");
+  // Add missing compressionProgress state and setter
+  const [compressionProgressState, setCompressionProgress] = useState<{
+    processed: number;
+    total: number;
+    current: string;
+    success: number;
+    failed: number;
+  } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importedPlaylists, setImportedPlaylists] = useState<{[key: string]: Track[]}>({});
   const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
@@ -356,12 +382,17 @@ export const MusicLibrary = memo(({
     );
   }, [currentView, importedPlaylists, playlistsLoaded, onTrackSelect, expandedPlaylists, togglePlaylistExpansion, handlePlaylistNameChange]);
 
-  // NUEVO: Renderizar vista de configuraciones
   if (currentView === "settings") {
     return (
       <SettingsView 
         isDarkMode={isDarkMode}
         onToggleDarkMode={onToggleDarkMode}
+        isCompressing={isCompressing}
+        setIsCompressing={setIsCompressing}
+        compressionProgress={compressionProgress}
+        compressionResult={compressionResult}
+        setCompressionResult={setCompressionResult}
+        setCompressionProgress={setCompressionProgress}
       />
     );
   }

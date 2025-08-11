@@ -20,6 +20,7 @@ export interface Settings {
   repeatMode: "off" | "all" | "one";
   isShuffle: boolean;
   isDarkMode: boolean;
+  audioQuality?: 'low' | 'medium' | 'high'; // NUEVO: Configuración de calidad de audio
   lastPlayedTrack?: Track | null;
   lastPlayedPosition?: number;
   lastPlayedTime?: number; // timestamp when app was closed
@@ -75,15 +76,40 @@ interface ImportTask {
   completedAt?: number;
 }
 
+// NUEVO: Interfaz para gestión de almacenamiento
+interface StorageAPI {
+  setAudioQuality: (quality: 'low' | 'medium' | 'high') => Promise<boolean>;
+  compressExistingFiles: (quality: 'low' | 'medium' | 'high') => Promise<{
+    success: number;
+    failed: number;
+    spaceSaved: number;
+  }>;
+  getStorageStats: () => Promise<{
+    totalFiles: number;
+    totalSizeMB: number;
+    avgFileSizeMB: number;
+  }>;
+  cleanupCacheBySize: (targetSizeMB: number) => Promise<{
+    cleaned: number;
+    spaceFreedomMB: number;
+  }>;
+}
+
 declare global {
   interface Window {
     musicAPI: MusicAPI;
     settingsAPI: SettingsAPI;
     playlistAPI: PlaylistAPI;
     importManagerAPI?: ImportManagerAPI;
+    storageAPI: StorageAPI;
     electronAPI?: {
       on: (channel: string, listener: (...args: any[]) => void) => void;
       removeListener: (channel: string, listener: (...args: any[]) => void) => void;
+      // NUEVO: Soporte para eventos de compresión
+      send?: (channel: string, ...args: any[]) => void;
     };
   }
 }
+
+// NUEVO: Asegurar que las interfaces se exporten correctamente
+export {};
