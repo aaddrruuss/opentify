@@ -250,7 +250,7 @@ export const MusicLibrary = memo(({
         </div>
 
         {Object.keys(importedPlaylists).length > 0 && (
-          <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
             {Object.entries(importedPlaylists).map(([name, tracks]) => (
               <PlaylistCard
                 key={name}

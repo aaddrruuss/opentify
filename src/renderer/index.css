@@ -149,3 +149,157 @@ body {
 .playlist-gradient-4 {
   background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
 }
+
+/* Estilos para las playlist cards estilo Spotify */
+.playlist-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.playlist-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Efecto de hover más suave para las imágenes de playlist */
+.playlist-image {
+  transition: transform 0.3s ease;
+}
+
+.playlist-card:hover .playlist-image {
+  transform: scale(1.02);
+}
+
+/* Animación del botón de play */
+.play-button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.play-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Mejora de la cuadrícula responsive */
+@media (max-width: 640px) {
+  .playlist-grid {
+    grid-template-columns: repeat(1, 1fr);
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 768px) {
+  .playlist-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .playlist-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/* Mejora del cursor para elementos editables */
+.cursor-text-hover:hover {
+  cursor: text !important;
+}
+
+/* Estilo para títulos de playlist editables */
+.playlist-title-editable {
+  cursor: text !important;
+  transition: all 0.2s ease;
+}
+
+.playlist-title-editable:hover {
+  color: #2196F3 !important;
+  cursor: text !important;
+}
+
+/* Animaciones suaves para el modal de playlist */
+.playlist-modal-enter {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.playlist-modal-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.playlist-modal-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.playlist-modal-exit-active {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Mejora de hover para tracks en el modal - CORREGIDO */
+.playlist-track-hover:hover .track-play-icon {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+.track-play-icon {
+  opacity: 0;
+  transform: translateX(0);
+  transition: all 0.2s ease;
+}
+
+/* Corregir cursor para el modal de playlist - SIMPLIFICADO */
+.playlist-modal-backdrop {
+  cursor: default !important;
+}
+
+.playlist-modal-content {
+  cursor: default !important;
+}
+
+/* Solo los botones deben tener cursor pointer */
+.playlist-modal-content button {
+  cursor: pointer !important;
+}
+/* Solo los botones deben tener cursor pointer */
+.playlist-modal-content button {
+  cursor: pointer !important;
+}
+
+.playlist-modal-content button * {
+  pointer-events: none !important;
+  cursor: pointer !important;
+}
+
+/* Asegurar que el contenedor del modal tenga cursor default */
+.modal-container {
+  cursor: default !important;
+}
+
+.modal-container * {
+  cursor: default !important;
+}
+
+/* Excepciones para elementos clickeables */
+.modal-container button,
+.modal-container .cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Forzar cursor default en áreas específicas */
+.modal-track-list {
+  cursor: default !important;
+}
+
+.modal-track-item {
+  cursor: pointer !important;
+}
+
+.modal-track-item * {
+  pointer-events: none !important;
+}
