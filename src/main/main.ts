@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "path";
 import { setupIpcHandlers } from './ipcHandlers';
 import { setupImportManagerHandlers, importManager } from './importManager';
@@ -76,6 +76,18 @@ function createWindow() {
 
   // Configurar el import manager con la ventana principal
   importManager.setMainWindow(mainWindow);
+
+  // Handler para abrir enlaces externos en el navegador predeterminado
+  ipcMain.handle('open-external-link', async (event, url) => {
+    try {
+      await shell.openExternal(url);
+      console.log(`🔗 Abriendo enlace externo: ${url}`);
+      return { success: true };
+    } catch (error) {
+      console.error('Error abriendo enlace externo:', error);
+      return { success: false, error: typeof error === 'object' && error !== null && 'message' in error ? (error as { message: string }).message : String(error) };
+    }
+  });
 
   // Mostrar ventana solo cuando esté lista
   mainWindow.once('ready-to-show', () => {

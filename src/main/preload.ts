@@ -11,6 +11,9 @@ try {
     removeListener: (channel: string, listener: (...args: any[]) => void) => {
       ipcRenderer.removeListener(channel, listener);
     },
+    invoke: (channel: string, ...args: any[]) => {
+      return ipcRenderer.invoke(channel, ...args);
+    },
   });
 
   contextBridge.exposeInMainWorld('musicAPI', {
