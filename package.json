@@ -2,10 +2,11 @@
   "name": "music-player",
   "version": "1.0.0",
   "description": "",
-  "icon": "src/assets/icon.png",
+  "icon": "assets/images/icon.png",
   "main": "dist/main/main.js",
   "scripts": {
-    "build": "tsc && webpack",
+    "copy-assets": "node -e \"const fs = require('fs'); const path = require('path'); fs.copyFileSync('assets/images/icon.png', 'dist/icon.png'); console.log('Icon copied');\"",
+    "build": "tsc && webpack && npm run copy-assets",
     "start": "npm run build && electron .",
     "dev": "concurrently \"tsc -w\" \"webpack --watch\" \"wait-on dist/main.js && electron .\"",
     "compile": "tsc -w",
@@ -18,12 +19,20 @@
     "directories": {
       "output": "build"
     },
-    
+    "icon": "assets/images/icon.png",
     "files": [
-      "dist/**/*"
+      "dist/**/*",
+      "assets/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/images/icon.png"
+    },
+    "mac": {
+      "icon": "assets/images/icon.png"
+    },
+    "linux": {
+      "icon": "assets/images/icon.png"
     }
   },
   "keywords": [],

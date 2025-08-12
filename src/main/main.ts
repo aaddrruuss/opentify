@@ -1,15 +1,46 @@
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "path";
+import fs from "fs";
 import { setupIpcHandlers } from './ipcHandlers';
 import { setupImportManagerHandlers, importManager } from './importManager';
 
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
+  const iconPath = path.join(__dirname, "../icon.png");
+  console.log("🎨 Loading app icon from:", iconPath);
+  
+  // Verificar si el icono existe
+  if (fs.existsSync(iconPath)) {
+    console.log("✅ Icon file found");
+  } else {
+    console.error("❌ Icon file not found at:", iconPath);
+    // Intentar rutas alternativas
+    const altPaths = [
+      path.join(__dirname, "../../assets/images/icon.png"),
+      path.join(__dirname, "../../../assets/images/icon.png"),
+      path.join(process.cwd(), "assets/images/icon.png"),
+    ];
+    
+    for (const altPath of altPaths) {
+      if (fs.existsSync(altPath)) {
+        console.log("✅ Found alternative icon at:", altPath);
+        // Copiar el icono a la ubicación esperada
+        try {
+          fs.copyFileSync(altPath, iconPath);
+          console.log("✅ Icon copied to expected location");
+        } catch (error) {
+          console.error("❌ Error copying icon:", error);
+        }
+        break;
+      }
+    }
+  }
+  
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, "../../assets/images/icon.png"),
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"), // Esto debería seguir como .js ya que TypeScript se compila a .js
       contextIsolation: true,
@@ -118,7 +149,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Configuraciones de rendimiento de la app
-  app.setAppUserModelId('com.yourname.musicplayer');
+  app.setAppUserModelId('com.adrus.musicplayer');
   
   createWindow();
 });
