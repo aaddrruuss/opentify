@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { YouTube } from "youtube-sr";
 import YtDlpWrap from "yt-dlp-wrap";
+import ffmpegPath from "ffmpeg-static";
 
 // Ruta específica para el binario yt-dlp basada en la plataforma
 const getBinaryPath = () => {
@@ -37,60 +38,18 @@ const songsDir = getSongsDirectory();
 console.log("yt-dlp path:", ytdlpPath);
 console.log("Songs cache directory:", songsDir);
 
-// Función para encontrar la ruta de FFmpeg en el sistema
-async function findFFmpegPath(): Promise<string | null> {
+// Función para obtener la ruta de FFmpeg usando ffmpeg-static
+function getFFmpegPath(): string | null {
   try {
-    const { exec } = require('child_process');
-    const util = require('util');
-    const execAsync = util.promisify(exec);
-    
-    // Intentar encontrar ffmpeg en el PATH
-    const command = process.platform === 'win32' ? 'where ffmpeg' : 'which ffmpeg';
-    
-    try {
-      const { stdout } = await execAsync(command);
-      const ffmpegPath = stdout.trim();
-      if (ffmpegPath) {
-        console.log("FFmpeg encontrado en:", ffmpegPath);
-        return ffmpegPath;
-      }
-    } catch (err) {
-      // FFmpeg no está en el PATH
-    }
-    
-    // Ubicaciones comunes por sistema operativo
-    let commonLocations: string[] = [];
-    
-    if (process.platform === 'win32') {
-      commonLocations = [
-        'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',
-        'C:\\Program Files (x86)\\ffmpeg\\bin\\ffmpeg.exe'
-      ];
-    } else if (process.platform === 'darwin') {
-      commonLocations = [
-        '/usr/local/bin/ffmpeg',
-        '/opt/homebrew/bin/ffmpeg',
-        '/opt/local/bin/ffmpeg'
-      ];
+    if (ffmpegPath) {
+      console.log("✅ FFmpeg-static disponible en:", ffmpegPath);
+      return ffmpegPath;
     } else {
-      commonLocations = [
-        '/usr/bin/ffmpeg',
-        '/usr/local/bin/ffmpeg'
-      ];
+      console.error("❌ FFmpeg-static no está disponible");
+      return null;
     }
-    
-    // Verificar ubicaciones comunes
-    for (const location of commonLocations) {
-      if (fs.existsSync(location)) {
-        console.log("FFmpeg encontrado en ubicación común:", location);
-        return location;
-      }
-    }
-    
-    console.warn("❌ FFmpeg no encontrado en el sistema");
-    return null;
   } catch (error) {
-    console.error("Error buscando FFmpeg:", error);
+    console.error("Error obteniendo ruta de ffmpeg-static:", error);
     return null;
   }
 }
@@ -281,10 +240,10 @@ interface DownloadRequest {
 class DownloadManager {
   private activeDownloads = new Map<string, Promise<string | null>>();
   private downloadQueue: DownloadRequest[] = [];
-  private maxConcurrentDownloads = 1;
+  private maxConcurrentDownloads = 5; // Aumentado de 3 a 5 para mayor velocidad
   private activeCount = 0;
   private lastDownloadTime = 0;
-  private minDelayBetweenDownloads = 1500;
+  private minDelayBetweenDownloads = 200; // Reducido de 500ms a 200ms para mayor velocidad
   private audioQuality: 'low' | 'medium' | 'high' = 'medium'; // Nueva configuración
 
   // NUEVO: Configurar calidad de audio
@@ -299,17 +258,20 @@ class DownloadManager {
       low: {
         bitrate: '96K',
         format: 'mp3',
-        description: 'Baja calidad, máxima compresión (~1MB/min)'
+        description: 'Baja calidad, máxima compresión (~1MB/min)',
+        ytdlpQuality: '7' // 7 = calidad baja pero rápida
       },
       medium: {
         bitrate: '128K', 
         format: 'mp3',
-        description: 'Calidad equilibrada (~1.5MB/min)'
+        description: 'Calidad equilibrada (~1.5MB/min)',
+        ytdlpQuality: '5' // 5 = calidad media equilibrada
       },
       high: {
         bitrate: '192K',
         format: 'mp3', 
-        description: 'Alta calidad, menor compresión (~2.5MB/min)'
+        description: 'Alta calidad, menor compresión (~2.5MB/min)',
+        ytdlpQuality: '3' // 3 = calidad alta
       }
     };
     return configs[quality];
@@ -436,29 +398,48 @@ class DownloadManager {
         console.log(`🎵 Descargando con calidad ${this.audioQuality} (${compressionConfig.bitrate}): ${title || videoId}`);
       }
       
-      // Configuración mejorada de yt-dlp para mayor compresión
+      // NUEVO: Timing para debug de velocidad
+      const downloadStartTime = Date.now();
+      
+      // Configuración optimizada de yt-dlp para máxima velocidad
+      const ffmpegBinaryPath = getFFmpegPath();
       const ytdlpArgs = [
         url,
         "--extract-audio",
         "--audio-format", compressionConfig.format,
-        "--audio-quality", compressionConfig.bitrate,
+        // OPTIMIZADO: Usar solo audio-quality basado en configuración del usuario
+        "--audio-quality", compressionConfig.ytdlpQuality,
         "--no-playlist",
         "--output", outputPath,
-        "--quiet",
+        // OPTIMIZADO: Permitir logs para debug pero solo errores importantes
         "--no-warnings",
-        // NUEVOS: Parámetros de compresión adicional
-        "--postprocessor-args", `ffmpeg:-ac 2 -ar 44100 -b:a ${compressionConfig.bitrate}`,
+        // NUEVOS: Parámetros de optimización de velocidad
+        "--concurrent-fragments", "4", // Descargas paralelas de fragmentos
+        "--retries", "3",
+        "--retry-sleep", "1",
+        // OPTIMIZADO: Solo usar ffmpeg si es necesario y de forma más eficiente
+        ...(ffmpegBinaryPath ? ["--ffmpeg-location", ffmpegBinaryPath] : []),
+        // REMOVIDO: postprocessor-args que causa conversión lenta innecesaria
+        // OPTIMIZADO: Metadatos mínimos para velocidad
         "--embed-metadata",
-        "--no-embed-thumbnail", // Evitar metadatos de imagen para ahorrar espacio
+        "--no-embed-thumbnail",
+        // NUEVO: Configuraciones adicionales de velocidad
+        "--socket-timeout", "30",
+        "--fragment-retries", "3"
       ];
 
+      console.log(`⏱️ Iniciando yt-dlp para: ${title || videoId}`);
       await ytDlpWrapInstance!.execPromise(ytdlpArgs);
+      
+      // NUEVO: Calcular tiempo de descarga para debug
+      const downloadTime = Date.now() - downloadStartTime;
 
       // Verificar que el archivo se descargó correctamente
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
         const fileSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2);
+        const downloadSpeed = (parseFloat(fileSizeMB) / (downloadTime / 1000)).toFixed(2);
         if (!preload) {
-          console.log(`✅ DESCARGA COMPLETA (${fileSizeMB}MB): ${path.basename(outputPath)}`);
+          console.log(`✅ DESCARGA COMPLETA (${fileSizeMB}MB en ${(downloadTime/1000).toFixed(1)}s = ${downloadSpeed}MB/s): ${path.basename(outputPath)}`);
         }
         return outputPath;
       } else {
@@ -635,9 +616,9 @@ class DownloadManager {
     console.log(`📥 Iniciando descarga optimizada de ${tracks.length} canciones para "${playlistName}"`);
     console.log(`📁 Directorio de destino: ${playlistSongsDir}`);
     
-    // Configuración muy conservadora para playlist
-    const batchSize = 1; // Una canción a la vez
-    const batchDelay = 5000; // 5 segundos entre descargas
+    // Configuración optimizada para playlist
+    const batchSize = 3; // Procesamiento por lotes
+    const batchDelay = 300; // Reducido de 1000ms a 300ms para mayor velocidad
     
     for (let i = 0; i < tracks.length; i += batchSize) {
       const batch = tracks.slice(i, i + batchSize);
@@ -683,8 +664,8 @@ class DownloadManager {
           console.error(`Error procesando ${track.title}:`, error);
         }
         
-        // Delay entre cada canción individual
-        await new Promise(resolve => setTimeout(resolve, batchDelay));
+        // Delay reducido entre cada canción individual
+        await new Promise(resolve => setTimeout(resolve, 150)); // Reducido el delay individual
       }
     }
     
@@ -940,27 +921,59 @@ class DownloadManager {
     return mimeTypes[extension.toLowerCase()] || 'image/jpeg';
   }
 
-  // Función para obtener la duración de un archivo de audio
+  // Función para obtener la duración de un archivo de audio usando ffmpeg-static
   async function getAudioDuration(filePath: string): Promise<number> {
     try {
-      // Usar ffprobe para obtener la duración exacta del archivo
-      const { exec } = require('child_process');
-      const util = require('util');
-      const execAsync = util.promisify(exec);
-      
-      // Verificar si ffprobe está disponible
-      try {
-        await execAsync('ffprobe -version');
-      } catch (error) {
-        console.warn("ffprobe no disponible, usando estimación básica");
-        return -1; // Indicar que no se puede verificar
+      const ffmpegBinaryPath = getFFmpegPath();
+      if (!ffmpegBinaryPath) {
+        console.warn("ffmpeg-static no disponible, usando estimación básica");
+        return -1;
       }
       
-      const command = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`;
-      const { stdout } = await execAsync(command);
-      const duration = parseFloat(stdout.trim());
+      // Obtener el directorio de ffmpeg para encontrar ffprobe
+      const ffmpegDir = path.dirname(ffmpegBinaryPath);
+      const ffprobeExtension = process.platform === 'win32' ? '.exe' : '';
+      const ffprobePath = path.join(ffmpegDir, `ffprobe${ffprobeExtension}`);
       
-      return isNaN(duration) ? -1 : duration;
+      // Verificar si ffprobe existe junto a ffmpeg
+      if (!fs.existsSync(ffprobePath)) {
+        console.warn("ffprobe no encontrado junto a ffmpeg-static, usando estimación básica");
+        return -1;
+      }
+      
+      const { spawn } = require('child_process');
+      
+      return new Promise<number>((resolve) => {
+        const args = ['-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath];
+        const ffprobeProcess = spawn(ffprobePath, args, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true
+        });
+        
+        let output = '';
+        ffprobeProcess.stdout.on('data', (data: Buffer) => {
+          output += data.toString();
+        });
+        
+        ffprobeProcess.on('close', (code: number | null) => {
+          if (code === 0 && output.trim()) {
+            const duration = parseFloat(output.trim());
+            resolve(isNaN(duration) ? -1 : duration);
+          } else {
+            resolve(-1);
+          }
+        });
+        
+        ffprobeProcess.on('error', () => {
+          resolve(-1);
+        });
+        
+        // Timeout de 10 segundos
+        setTimeout(() => {
+          ffprobeProcess.kill();
+          resolve(-1);
+        }, 10000);
+      });
     } catch (error) {
       console.warn("Error obteniendo duración del audio:", error);
       return -1;
@@ -1045,13 +1058,13 @@ class DownloadManager {
         { bitrate: '128K', format: 'mp3' };
       
       // NUEVO: Verificar ffmpeg una sola vez al inicio
-      const ffmpegPath = await findFFmpegPath();
-      if (!ffmpegPath) {
-        console.warn("❌ FFmpeg no encontrado, compresión cancelada");
+      const ffmpegBinaryPath = getFFmpegPath();
+      if (!ffmpegBinaryPath) {
+        console.warn("❌ FFmpeg no disponible, compresión cancelada");
         return { success: 0, failed: files.length, spaceSaved: 0 };
       }
       
-      console.log(`✅ FFmpeg encontrado en: ${ffmpegPath}`);
+      console.log(`✅ FFmpeg disponible en: ${ffmpegBinaryPath}`);
       
       // NUEVO: Enviar progreso inicial
       if (progressCallback) {
@@ -1065,8 +1078,8 @@ class DownloadManager {
       }
       
       // OPTIMIZADO: Procesar en lotes más pequeños para mejor control
-      const BATCH_SIZE = 3; // Procesar 3 archivos en paralelo
-      const BATCH_DELAY = 500; // Delay más corto entre lotes
+      const BATCH_SIZE = 4; // Aumentado de 3 a 4 para mayor velocidad
+      const BATCH_DELAY = 250; // Reducido de 500ms a 250ms para mayor velocidad
       
       for (let i = 0; i < files.length; i += BATCH_SIZE) {
         const batch = files.slice(i, i + BATCH_SIZE);
@@ -1113,7 +1126,7 @@ class DownloadManager {
                 tempPath
               ];
               
-              const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, {
+              const ffmpegProcess = spawn(ffmpegBinaryPath, ffmpegArgs, {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 windowsHide: true
               });
@@ -1284,8 +1297,10 @@ export function setupIpcHandlers() {
   // Limpiar archivos huérfanos al iniciar
   downloadManager.cleanupOrphanedFiles();
 
-  // NUEVO: Configurar calidad de audio por defecto
-  downloadManager.setAudioQuality('medium'); // Calidad equilibrada por defecto
+  // CORREGIDO: Cargar calidad de audio desde las configuraciones guardadas
+  const savedSettings = loadSettings();
+  downloadManager.setAudioQuality(savedSettings.audioQuality || 'medium');
+  console.log(`🎵 Calidad de audio inicializada desde configuración: ${savedSettings.audioQuality || 'medium'}`);
 
   // Cache más eficiente con LRU y compresión
   const searchCache = new Map<string, { results: any[], timestamp: number, hits: number }>();
