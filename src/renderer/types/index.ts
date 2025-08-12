@@ -21,6 +21,7 @@ export interface Settings {
   isShuffle: boolean;
   isDarkMode: boolean;
   audioQuality?: 'low' | 'medium' | 'high'; // NUEVO: Configuración de calidad de audio
+  discordRPCEnabled?: boolean; // NUEVO: Discord Rich Presence
   lastPlayedTrack?: Track | null;
   lastPlayedPosition?: number;
   lastPlayedTime?: number; // timestamp when app was closed
@@ -95,6 +96,26 @@ interface StorageAPI {
   }>;
 }
 
+// NUEVO: Interfaz para Discord Rich Presence
+interface DiscordRPCAPI {
+  connect: () => Promise<boolean>;
+  disconnect: () => Promise<boolean>;
+  setEnabled: (enabled: boolean) => Promise<boolean>;
+  updatePresence: (trackInfo: {
+    title: string;
+    artist: string;
+    duration: number;
+    position: number;
+    cover?: string;
+    isPlaying: boolean;
+  }) => Promise<boolean>;
+  clearPresence: () => Promise<boolean>;
+  updatePlayState: (isPlaying: boolean) => Promise<boolean>;
+  updatePosition: (position: number) => Promise<boolean>;
+  isEnabled: () => Promise<boolean>;
+  isConnected: () => Promise<boolean>;
+}
+
 declare global {
   interface Window {
     musicAPI: MusicAPI;
@@ -102,6 +123,7 @@ declare global {
     playlistAPI: PlaylistAPI;
     importManagerAPI?: ImportManagerAPI;
     storageAPI: StorageAPI;
+    discordRPCAPI: DiscordRPCAPI; // NUEVO: Discord RPC API
     electronAPI?: {
       on: (channel: string, listener: (...args: any[]) => void) => void;
       removeListener: (channel: string, listener: (...args: any[]) => void) => void;

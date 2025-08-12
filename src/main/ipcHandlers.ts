@@ -4,6 +4,7 @@ import fs from "fs";
 import { YouTube } from "youtube-sr";
 import YtDlpWrap from "yt-dlp-wrap";
 import ffmpegPath from "ffmpeg-static";
+import { discordRPCService } from "./discordRPC";
 
 // Ruta específica para el binario yt-dlp basada en la plataforma
 const getBinaryPath = () => {
@@ -180,6 +181,7 @@ const defaultSettings = {
   isShuffle: false,
   isDarkMode: false,
   audioQuality: "medium" as 'low' | 'medium' | 'high', // NUEVO: Configuración de calidad de audio
+  discordRPCEnabled: true, // NUEVO: Discord Rich Presence habilitado por defecto
   lastPlayedTrack: null,
   lastPlayedPosition: 0,
   lastPlayedTime: null
@@ -1298,9 +1300,9 @@ export function setupIpcHandlers() {
   downloadManager.cleanupOrphanedFiles();
 
   // CORREGIDO: Cargar calidad de audio desde las configuraciones guardadas
-  const savedSettings = loadSettings();
-  downloadManager.setAudioQuality(savedSettings.audioQuality || 'medium');
-  console.log(`🎵 Calidad de audio inicializada desde configuración: ${savedSettings.audioQuality || 'medium'}`);
+  const initialSettings = loadSettings();
+  downloadManager.setAudioQuality(initialSettings.audioQuality || 'medium');
+  console.log(`🎵 Calidad de audio inicializada desde configuración: ${initialSettings.audioQuality || 'medium'}`);
 
   // Cache más eficiente con LRU y compresión
   const searchCache = new Map<string, { results: any[], timestamp: number, hits: number }>();
@@ -1495,144 +1497,202 @@ export function setupIpcHandlers() {
   });
 
   ipcMain.handle("compress-existing-files", async (event, quality: 'low' | 'medium' | 'high') => {
-    return await compressExistingFiles(quality);
+    try {
+      // NUEVO: Función para enviar progreso en tiempo real
+      const sendProgress = (progress: { processed: number, total: number, current: string, success: number, failed: number }) => {
+        event.sender.send('compression-progress', progress);
+      };
+      
+      // NUEVO: Ejecutar compresión con callback de progreso
+      const result = await compressExistingFiles(quality, sendProgress);
+      
+      // NUEVO: Enviar evento de finalización explícito
+      event.sender.send('compression-completed', result);
+      
+      console.log("🎯 Compresión finalizada, eventos enviados al frontend");
+      
+      return result;
+    } catch (error) {
+      console.error("Error en handler de compresión:", error);
+      
+      // NUEVO: Enviar evento de error para limpiar UI
+      event.sender.send('compression-completed', { success: 0, failed: 0, spaceSaved: 0 });
+      
+      return { success: 0, failed: 0, spaceSaved: 0 };
+    }
   });
 
-  // Función para obtener estadísticas de almacenamiento
-  async function getStorageStats() {
+  // --- ELIMINADO: Handler duplicado de "compress-existing-files" ---
+  // ipcMain.handle("compress-existing-files", async (event, quality: 'low' | 'medium' | 'high') => {
+  //   return await compressExistingFiles(quality);
+  // });
+
+  // --- Discord Rich Presence handlers ---
+  ipcMain.handle("discord-rpc-connect", async () => {
+    try {
+      return await discordRPCService.connect();
+    } catch (error) {
+      console.error("Error connecting Discord RPC:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-disconnect", async () => {
+    try {
+      await discordRPCService.disconnect();
+      return true;
+    } catch (error) {
+      console.error("Error disconnecting Discord RPC:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-set-enabled", async (event, enabled: boolean) => {
+    try {
+      discordRPCService.setEnabled(enabled);
+      
+      // Guardar la configuración
+      const currentSettings = loadSettings();
+      currentSettings.discordRPCEnabled = enabled;
+      saveSettings(currentSettings);
+      
+      return true;
+    } catch (error) {
+      console.error("Error setting Discord RPC enabled:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-update-presence", async (event, trackInfo) => {
+    try {
+      discordRPCService.updatePresence(trackInfo);
+      return true;
+    } catch (error) {
+      console.error("Error updating Discord RPC presence:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-clear-presence", async () => {
+    try {
+      discordRPCService.clearPresence();
+      return true;
+    } catch (error) {
+      console.error("Error clearing Discord RPC presence:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-update-play-state", async (event, isPlaying: boolean) => {
+    try {
+      discordRPCService.updatePlayState(isPlaying);
+      return true;
+    } catch (error) {
+      console.error("Error updating Discord RPC play state:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-update-position", async (event, position: number) => {
+    try {
+      discordRPCService.updatePosition(position);
+      return true;
+    } catch (error) {
+      console.error("Error updating Discord RPC position:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-is-enabled", async () => {
+    try {
+      return discordRPCService.isRPCEnabled();
+    } catch (error) {
+      console.error("Error getting Discord RPC enabled status:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-is-connected", async () => {
+    try {
+      return discordRPCService.isRPCConnected();
+    } catch (error) {
+      console.error("Error getting Discord RPC connection status:", error);
+      return false;
+    }
+  });
+
+  // Inicializar Discord RPC basado en la configuración
+  const discordSettings = loadSettings();
+  if (discordSettings.discordRPCEnabled !== false) { // Habilitar por defecto
+    setTimeout(() => {
+      discordRPCService.connect();
+    }, 2000); // Esperar 2 segundos después del inicio
+  }
+}
+  ipcMain.handle("get-storage-stats", async () => {
+    // Implementación básica para obtener estadísticas de almacenamiento
     try {
       ensureSongsDirExists();
-      const songsDir = getSongsDirectory();
-      const playlistsDir = getPlaylistsDirectory();
-      
-      // Calcular tamaño total de canciones en cache
-      let songFiles = fs.readdirSync(songsDir).filter(file => file.endsWith('.mp3'));
-      let totalSongsSize = 0;
-      
-      for (const file of songFiles) {
-        const filePath = path.join(songsDir, file);
-        const stats = fs.statSync(filePath);
-        totalSongsSize += stats.size;
+      const files = fs.readdirSync(songsDir).filter(file => file.endsWith('.mp3'));
+      let totalSize = 0;
+      for (const file of files) {
+        const stats = fs.statSync(path.join(songsDir, file));
+        totalSize += stats.size;
       }
-      
-      // Calcular tamaño de playlists
-      let totalPlaylistsSize = 0;
-      let playlistCount = 0;
-      
-      if (fs.existsSync(playlistsDir)) {
-        const playlists = fs.readdirSync(playlistsDir, { withFileTypes: true })
-          .filter(dir => dir.isDirectory())
-          .map(dir => dir.name);
-          
-        playlistCount = playlists.length;
-        
-        for (const playlist of playlists) {
-          const playlistDir = path.join(playlistsDir, playlist);
-          const files = fs.readdirSync(playlistDir, { recursive: true });
-          
-          for (const file of files) {
-            try {
-              const filePath = path.join(playlistDir, file as string);
-              if (fs.statSync(filePath).isFile()) {
-                totalPlaylistsSize += fs.statSync(filePath).size;
-              }
-            } catch (error) {
-              // Ignorar errores individuales al calcular tamaño
-            }
-          }
-        }
-      }
-      
-      // Convertir bytes a MB para mayor legibilidad
-      const songsSizeMB = (totalSongsSize / (1024 * 1024)).toFixed(2);
-      const playlistsSizeMB = (totalPlaylistsSize / (1024 * 1024)).toFixed(2);
-      const totalSizeMB = ((totalSongsSize + totalPlaylistsSize) / (1024 * 1024)).toFixed(2);
-      
-      // CORREGIDO: totalFiles = número de archivos mp3 en songsDir
       return {
-        totalFiles: songFiles.length,
-        totalSizeMB: parseFloat(songsSizeMB),
-        avgFileSizeMB: songFiles.length > 0 ? parseFloat((totalSongsSize / songFiles.length / 1024 / 1024).toFixed(2)) : 0,
-        // ...otros campos si los necesitas...
+        totalFiles: files.length,
+        totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
       };
     } catch (error) {
-      console.error("Error obteniendo estadísticas de almacenamiento:", error);
+      console.error("Error getting storage stats:", error);
       return {
         totalFiles: 0,
-        totalSizeMB: 0,
-        avgFileSizeMB: 0
+        totalSizeMB: "0"
       };
     }
-  }
+  });
 
-  // Función para limpiar cache hasta un tamaño objetivo
-  async function cleanupCacheBySize(targetSizeMB: number) {
+  ipcMain.handle("cleanup-cache-by-size", async (event, targetSizeMB: number) => {
+    // Remove oldest files until the cache size is below targetSizeMB
     try {
       ensureSongsDirExists();
-      const songsDir = getSongsDirectory();
-      
-      // Obtener lista de archivos con sus fechas de modificación
       const files = fs.readdirSync(songsDir)
         .filter(file => file.endsWith('.mp3'))
         .map(file => {
           const filePath = path.join(songsDir, file);
           const stats = fs.statSync(filePath);
-          return {
-            name: file,
-            path: filePath,
-            size: stats.size,
-            mtime: stats.mtime.getTime()
-          };
+          return { file, filePath, size: stats.size, mtime: stats.mtime.getTime() };
         });
-      
-      // Ordenar por fecha (más antiguos primero)
+
+      let totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      const targetSizeBytes = targetSizeMB * 1024 * 1024;
+      let removedFiles: string[] = [];
+
+      // Sort by oldest modified time
       files.sort((a, b) => a.mtime - b.mtime);
-      
-      let currentTotalSize = files.reduce((total, file) => total + file.size, 0);
-      let targetSize = targetSizeMB * 1024 * 1024; // Convertir MB a bytes
-      let deletedCount = 0;
-      let freedSpace = 0;
-      
-      // Eliminar archivos antiguos hasta alcanzar el tamaño objetivo
-      while (currentTotalSize > targetSize && files.length > 0) {
-        const fileToDelete = files.shift();
-        if (fileToDelete) {
-          try {
-            fs.unlinkSync(fileToDelete.path);
-            currentTotalSize -= fileToDelete.size;
-            freedSpace += fileToDelete.size;
-            deletedCount++;
-            console.log(`🗑️ Eliminado: ${fileToDelete.name} (${(fileToDelete.size / (1024 * 1024)).toFixed(2)}MB)`);
-          } catch (error) {
-            console.error(`Error eliminando ${fileToDelete.name}:`, error);
-          }
+
+      for (const f of files) {
+        if (totalSize <= targetSizeBytes) break;
+        try {
+          fs.unlinkSync(f.filePath);
+          totalSize -= f.size;
+          removedFiles.push(f.file);
+        } catch (err) {
+          // Ignore individual file errors
         }
       }
-      
-      const freedSpaceMB = (freedSpace / (1024 * 1024)).toFixed(2);
-      console.log(`✅ Limpieza completada: ${deletedCount} archivos eliminados, ${freedSpaceMB}MB liberados`);
-      
+
       return {
-        deletedCount,
-        freedSpace,
-        freedSpaceMB: parseFloat(freedSpaceMB)
+        removedFiles,
+        totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
       };
     } catch (error) {
-      console.error("Error limpiando cache:", error);
+      console.error("Error cleaning up cache by size:", error);
       return {
-        deletedCount: 0,
-        freedSpace: 0,
-        freedSpaceMB: 0
+        removedFiles: [],
+        totalSizeMB: "0"
       };
     }
-  }
-
-  ipcMain.handle("get-storage-stats", async () => {
-    return getStorageStats();
-  });
-
-  ipcMain.handle("cleanup-cache-by-size", async (event, targetSizeMB: number) => {
-    return await cleanupCacheBySize(targetSizeMB);
   });
 
   // Handler mejorado con calidad configurable
@@ -1692,4 +1752,106 @@ export function setupIpcHandlers() {
       return { success: 0, failed: 0, spaceSaved: 0 };
     }
   });
-}
+
+  // Discord Rich Presence handlers
+  ipcMain.handle("discord-rpc-connect", async () => {
+    try {
+      return await discordRPCService.connect();
+    } catch (error) {
+      console.error("Error connecting Discord RPC:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-disconnect", async () => {
+    try {
+      await discordRPCService.disconnect();
+      return true;
+    } catch (error) {
+      console.error("Error disconnecting Discord RPC:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-set-enabled", async (event, enabled: boolean) => {
+    try {
+      discordRPCService.setEnabled(enabled);
+      
+      // Guardar la configuración
+      const currentSettings = loadSettings();
+      currentSettings.discordRPCEnabled = enabled;
+      saveSettings(currentSettings);
+      
+      return true;
+    } catch (error) {
+      console.error("Error setting Discord RPC enabled:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-update-presence", async (event, trackInfo) => {
+    try {
+      discordRPCService.updatePresence(trackInfo);
+      return true;
+    } catch (error) {
+      console.error("Error updating Discord RPC presence:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-clear-presence", async () => {
+    try {
+      discordRPCService.clearPresence();
+      return true;
+    } catch (error) {
+      console.error("Error clearing Discord RPC presence:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-update-play-state", async (event, isPlaying: boolean) => {
+    try {
+      discordRPCService.updatePlayState(isPlaying);
+      return true;
+    } catch (error) {
+      console.error("Error updating Discord RPC play state:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-update-position", async (event, position: number) => {
+    try {
+      discordRPCService.updatePosition(position);
+      return true;
+    } catch (error) {
+      console.error("Error updating Discord RPC position:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-is-enabled", async () => {
+    try {
+      return discordRPCService.isRPCEnabled();
+    } catch (error) {
+      console.error("Error getting Discord RPC enabled status:", error);
+      return false;
+    }
+  });
+
+  ipcMain.handle("discord-rpc-is-connected", async () => {
+    try {
+      return discordRPCService.isRPCConnected();
+    } catch (error) {
+      console.error("Error getting Discord RPC connection status:", error);
+      return false;
+    }
+  });
+
+  // Inicializar Discord RPC basado en la configuración
+  const discordSettings = loadSettings();
+  if (discordSettings.discordRPCEnabled !== false) { // Habilitar por defecto
+    setTimeout(() => {
+      discordRPCService.connect();
+    }, 2000); // Esperar 2 segundos después del inicio
+  }
+

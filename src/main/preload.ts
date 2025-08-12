@@ -63,6 +63,19 @@ try {
       ipcRenderer.invoke('cleanup-cache-by-size', targetSizeMB),
   });
 
+  // API para Discord Rich Presence
+  contextBridge.exposeInMainWorld('discordRPCAPI', {
+    connect: () => ipcRenderer.invoke('discord-rpc-connect'),
+    disconnect: () => ipcRenderer.invoke('discord-rpc-disconnect'),
+    setEnabled: (enabled: boolean) => ipcRenderer.invoke('discord-rpc-set-enabled', enabled),
+    updatePresence: (trackInfo: any) => ipcRenderer.invoke('discord-rpc-update-presence', trackInfo),
+    clearPresence: () => ipcRenderer.invoke('discord-rpc-clear-presence'),
+    updatePlayState: (isPlaying: boolean) => ipcRenderer.invoke('discord-rpc-update-play-state', isPlaying),
+    updatePosition: (position: number) => ipcRenderer.invoke('discord-rpc-update-position', position),
+    isEnabled: () => ipcRenderer.invoke('discord-rpc-is-enabled'),
+    isConnected: () => ipcRenderer.invoke('discord-rpc-is-connected'),
+  });
+
   console.log("✅ Preload script configurado correctamente");
 
 } catch (error) {

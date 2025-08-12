@@ -4,6 +4,7 @@ import { NowPlaying } from './components/NowPlaying';
 import { MusicLibrary } from './components/MusicLibrary';
 import { PlayerControls } from './components/PlayerControls';
 import { musicService } from './services/musicService';
+import { discordRPCClient } from './services/discordRPCService';
 import { Track, Settings } from './types/index';
 
 // Throttle function para optimizar actualizaciones
@@ -152,6 +153,15 @@ export function App() {
         }
         
         setSettingsLoaded(true);
+        
+        // Inicializar Discord RPC
+        if (settings.discordRPCEnabled !== false) {
+          setTimeout(() => {
+            discordRPCClient.initialize().catch(error => {
+              console.error('Failed to initialize Discord RPC:', error);
+            });
+          }, 1000);
+        }
       } catch (error) {
         console.error("Error cargando configuraciones:", error);
         if (mounted) setSettingsLoaded(true);
@@ -190,6 +200,32 @@ export function App() {
       root.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Actualizar Discord RPC cuando cambia la canción
+  useEffect(() => {
+    discordRPCClient.updateTrack(currentTrack, currentTime, isPlaying);
+  }, [currentTrack]);
+
+  // Actualizar Discord RPC cuando cambia el estado de reproducción
+  useEffect(() => {
+    if (currentTrack) {
+      discordRPCClient.updatePlayState(isPlaying);
+    }
+  }, [isPlaying, currentTrack]);
+
+  // Actualizar Discord RPC cuando cambia la posición (throttled)
+  const throttledDiscordPositionUpdate = useMemo(
+    () => throttle((time: number) => {
+      if (currentTrack && isPlaying) {
+        discordRPCClient.updatePosition(time);
+      }
+    }, 5000), // Actualizar posición cada 5 segundos
+    [currentTrack, isPlaying]
+  );
+
+  useEffect(() => {
+    throttledDiscordPositionUpdate(currentTime);
+  }, [currentTime, throttledDiscordPositionUpdate]);
 
   // Track selection optimizada
   const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {

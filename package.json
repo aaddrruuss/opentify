@@ -2,6 +2,7 @@
   "name": "music-player",
   "version": "1.0.0",
   "description": "",
+  "icon": "src/assets/icon.png",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "tsc && webpack",
@@ -12,11 +13,12 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.yourname.musicplayer",
+    "appId": "com.adrus.musicplayer",
     "productName": "Music Player",
     "directories": {
       "output": "build"
     },
+    
     "files": [
       "dist/**/*"
     ],
@@ -32,6 +34,7 @@
     "@babel/preset-react": "^7.27.1",
     "@babel/preset-typescript": "^7.27.1",
     "@electron-forge/cli": "^7.8.3",
+    "@types/discord-rpc": "^4.0.9",
     "@types/node": "^24.2.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
@@ -54,6 +57,7 @@
     "webpack-dev-server": "^5.2.2"
   },
   "dependencies": {
+    "discord-rpc": "^4.0.1",
     "ffmpeg-static": "^5.2.0",
     "lucide-react": "^0.539.0",
     "react": "^19.1.1",

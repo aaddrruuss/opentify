@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Moon, HardDrive, Download, Zap } from 'lucide-react';
+import { Sun, Moon, HardDrive, Download, Zap, MessageSquare } from 'lucide-react';
 
 interface SettingsViewProps {
   isDarkMode: boolean;
@@ -50,10 +50,12 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [audioQuality, setAudioQuality] = useState<'low' | 'medium' | 'high'>('medium');
   const [storageStats, setStorageStats] = useState<StorageStats>({ totalFiles: 0, totalSizeMB: 0, avgFileSizeMB: 0 });
+  const [discordRPCEnabled, setDiscordRPCEnabled] = useState<boolean>(true);
+  const [discordRPCConnected, setDiscordRPCConnected] = useState<boolean>(false);
 
-  // NUEVO: Cargar la calidad de audio desde las configuraciones al iniciar
+  // NUEVO: Cargar configuraciones al iniciar
   useEffect(() => {
-    const loadAudioQuality = async () => {
+    const loadSettings = async () => {
       try {
         if (window.settingsAPI) {
           const settings = await window.settingsAPI.loadSettings();
@@ -61,13 +63,27 @@ export function SettingsView({
             setAudioQuality(settings.audioQuality);
             console.log(`📊 Calidad de audio cargada: ${settings.audioQuality}`);
           }
+          
+          // Cargar configuración de Discord RPC
+          if (settings.discordRPCEnabled !== undefined) {
+            setDiscordRPCEnabled(settings.discordRPCEnabled);
+            console.log(`🎮 Discord RPC cargado: ${settings.discordRPCEnabled}`);
+          }
+        }
+
+        // Verificar estado de conexión de Discord RPC
+        if (window.discordRPCAPI) {
+          const enabled = await window.discordRPCAPI.isEnabled();
+          const connected = await window.discordRPCAPI.isConnected();
+          setDiscordRPCEnabled(enabled);
+          setDiscordRPCConnected(connected);
         }
       } catch (error) {
-        console.error("Error cargando calidad de audio:", error);
+        console.error("Error cargando configuraciones:", error);
       }
     };
 
-    loadAudioQuality();
+    loadSettings();
 
     // NUEVO: Configurar listeners para eventos de compresión
     if (window.electronAPI) {
@@ -137,6 +153,25 @@ export function SettingsView({
       }
     } catch (error) {
       console.error("Error configurando calidad:", error);
+    }
+  };
+
+  const handleDiscordRPCToggle = async () => {
+    try {
+      const newEnabled = !discordRPCEnabled;
+      setDiscordRPCEnabled(newEnabled);
+
+      if (window.discordRPCAPI) {
+        await window.discordRPCAPI.setEnabled(newEnabled);
+        
+        // Verificar estado de conexión después del cambio
+        setTimeout(async () => {
+          const connected = await window.discordRPCAPI.isConnected();
+          setDiscordRPCConnected(connected);
+        }, 1000);
+      }
+    } catch (error) {
+      console.error("Error configurando Discord RPC:", error);
     }
   };
 
@@ -244,6 +279,66 @@ export function SettingsView({
               />
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Discord Rich Presence */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+              <MessageSquare className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Discord Rich Presence
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Muestra lo que estás escuchando en tu perfil de Discord
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <div>
+                <p className="font-medium text-gray-900 dark:text-gray-100">
+                  Rich Presence
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {discordRPCConnected 
+                    ? "Conectado - Mostrando tu música actual" 
+                    : discordRPCEnabled 
+                      ? "Habilitado - Intentando conectar..."
+                      : "Deshabilitado"
+                  }
+                </p>
+              </div>
+            </div>
+            
+            <button
+              onClick={handleDiscordRPCToggle}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                discordRPCEnabled ? 'bg-indigo-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  discordRPCEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {discordRPCEnabled && (
+            <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+              <p className="text-sm text-indigo-800 dark:text-indigo-200">
+                <strong>Nota:</strong> Discord debe estar abierto para mostrar tu actividad musical. 
+                La información se actualiza automáticamente mientras reproduces música.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
