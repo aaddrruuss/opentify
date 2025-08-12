@@ -102,6 +102,9 @@ class MusicService {
         console.log("MusicService: Iniciando reproducción...");
         await this.audio.play();
         console.log("MusicService: Reproducción iniciada exitosamente");
+        
+        // Actualizar sesión multimedia
+        this.updateMediaSession();
       }
       
     } catch (error) {
@@ -147,7 +150,10 @@ class MusicService {
   resume(): void {
     if (this.audio && this.audio.paused && !this.isLoadingTrack && !this.audio.ended) {
       console.log(`MusicService: Reanudando desde ${this.audio.currentTime}s`);
-      this.audio.play().catch(error => {
+      this.audio.play().then(() => {
+        // Actualizar sesión multimedia cuando se reanuda
+        this.updateMediaSession();
+      }).catch(error => {
         console.error("Error al reanudar:", error);
       });
     } else {
@@ -165,6 +171,8 @@ class MusicService {
     if (this.audio && !this.audio.paused && !this.audio.ended) {
       console.log(`MusicService: Pausando en ${this.audio.currentTime}s`);
       this.audio.pause();
+      // Actualizar sesión multimedia cuando se pausa
+      this.updateMediaSession();
     }
   }
 
@@ -172,6 +180,11 @@ class MusicService {
   stop(): void {
     this.cleanup();
     this.currentTrack = null;
+    // Limpiar sesión multimedia
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+    }
   }
 
   private currentVolume: number = 80;
@@ -238,6 +251,21 @@ class MusicService {
   private handleTimeUpdate = () => {
     if (this.timeUpdateCallback && this.audio) {
       this.timeUpdateCallback(this.audio.currentTime);
+      
+      // Actualizar posición en la sesión multimedia (throttled)
+      if (this.currentTrack && !this.audio.paused && 'mediaSession' in navigator) {
+        try {
+          if (this.audio.duration > 0 && !isNaN(this.audio.duration)) {
+            navigator.mediaSession.setPositionState({
+              duration: this.audio.duration,
+              playbackRate: 1.0,
+              position: Math.max(0, Math.min(this.audio.currentTime, this.audio.duration))
+            });
+          }
+        } catch (error) {
+          // Ignore position update errors
+        }
+      }
     }
   };
 
@@ -501,6 +529,9 @@ class MusicService {
       await this.audio.play();
       console.log("MusicService: Reproduciendo exitosamente");
       
+      // Actualizar sesión multimedia
+      this.updateMediaSession();
+      
     } catch (error) {
       console.error("MusicService: Error en loadAudioOnly:", error);
       this.cleanup();
@@ -508,6 +539,59 @@ class MusicService {
     } finally {
       this.isLoadingTrack = false;
     }
+  }
+
+  // Actualizar sesión multimedia
+  private updateMediaSession(): void {
+    if (this.currentTrack && 'mediaSession' in navigator) {
+      try {
+        // Actualizar metadatos
+        const metadata = new MediaMetadata({
+          title: this.currentTrack.title || 'Título desconocido',
+          artist: this.currentTrack.artist || 'Artista desconocido',
+          album: 'Adrus Music Player',
+          artwork: [
+            {
+              src: this.currentTrack.thumbnail || this.currentTrack.cover || '',
+              sizes: '320x180',
+              type: 'image/jpeg'
+            },
+            {
+              src: this.currentTrack.thumbnail || this.currentTrack.cover || '',
+              sizes: '640x360', 
+              type: 'image/jpeg'
+            }
+          ]
+        });
+
+        navigator.mediaSession.metadata = metadata;
+        navigator.mediaSession.playbackState = this.isPlaying() ? 'playing' : 'paused';
+
+        // Actualizar posición si tenemos información válida
+        if (this.audio && this.audio.duration > 0 && !isNaN(this.audio.duration)) {
+          navigator.mediaSession.setPositionState({
+            duration: this.audio.duration,
+            playbackRate: 1.0,
+            position: Math.max(0, Math.min(this.audio.currentTime, this.audio.duration))
+          });
+        }
+
+        console.log(`🎵 Media session updated:`, {
+          title: this.currentTrack.title,
+          artist: this.currentTrack.artist,
+          playbackState: this.isPlaying() ? 'playing' : 'paused',
+          duration: this.audio?.duration,
+          position: this.audio?.currentTime
+        });
+      } catch (error) {
+        console.error('❌ Error updating media session:', error);
+      }
+    }
+  }
+
+  // Verificar si la MediaSession API está soportada
+  isMediaSessionSupported(): boolean {
+    return 'mediaSession' in navigator;
   }
 }
 

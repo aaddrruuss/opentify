@@ -400,6 +400,7 @@ export function App() {
     let timeUpdateCleanup: (() => void) | void;
     let endedCleanup: (() => void) | void;
     
+    
     // Setup listeners con manejo seguro de tipos
     try {
       timeUpdateCleanup = musicService.onTimeUpdate(throttledTimeUpdate);
@@ -615,6 +616,46 @@ export function App() {
   const toggleDarkMode = useCallback((darkMode: boolean) => {
     setIsDarkMode(darkMode);
   }, []);
+
+  // Configurar MediaSession handlers cuando los callbacks estén listos
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      console.log('🎛️ Setting up MediaSession action handlers');
+      
+      try {
+        navigator.mediaSession.setActionHandler('play', () => {
+          console.log('🎵 Media key: Play pressed');
+          handlePlayPause();
+        });
+        
+        navigator.mediaSession.setActionHandler('pause', () => {
+          console.log('⏸️ Media key: Pause pressed');
+          handlePlayPause();
+        });
+        
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+          console.log('⏭️ Media key: Next track pressed');
+          handleSkipForward();
+        });
+        
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+          console.log('⏮️ Media key: Previous track pressed');
+          handleSkipBack();
+        });
+        
+        navigator.mediaSession.setActionHandler('stop', () => {
+          console.log('⏹️ Media key: Stop pressed');
+          handlePlayPause();
+        });
+
+        console.log('✅ All MediaSession action handlers set up successfully');
+      } catch (error) {
+        console.error('❌ Error setting up MediaSession action handlers:', error);
+      }
+    } else {
+      console.warn('⚠️ MediaSession API not supported');
+    }
+  }, [handlePlayPause, handleSkipForward, handleSkipBack]);
 
   const handleRepeatModeChange = useCallback((mode: "off" | "all" | "one") => {
     setRepeatMode(mode);
