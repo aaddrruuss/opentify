@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Moon, HardDrive, Download, Zap, MessageSquare } from 'lucide-react';
+import { Sun, Moon, HardDrive, Download, Zap, MessageSquare, Power, Minimize2 } from 'lucide-react';
 
 interface SettingsViewProps {
   isDarkMode: boolean;
@@ -50,36 +50,84 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [audioQuality, setAudioQuality] = useState<'low' | 'medium' | 'high'>('medium');
   const [storageStats, setStorageStats] = useState<StorageStats>({ totalFiles: 0, totalSizeMB: 0, avgFileSizeMB: 0 });
-  const [discordRPCEnabled, setDiscordRPCEnabled] = useState<boolean>(true);
+  const [discordRPCEnabled, setDiscordRPCEnabled] = useState<boolean | null>(null);
   const [discordRPCConnected, setDiscordRPCConnected] = useState<boolean>(false);
+  // NUEVO: Estados para funcionalidades del sistema con valores null para indicar "no cargado"
+  const [autoStartup, setAutoStartup] = useState<'no' | 'yes' | 'minimized' | null>(null);
+  const [minimizeToTray, setMinimizeToTray] = useState<boolean | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState<boolean>(false);
 
   // NUEVO: Cargar configuraciones al iniciar
   useEffect(() => {
     const loadSettings = async () => {
       try {
+        let settings = null;
+        
         if (window.settingsAPI) {
-          const settings = await window.settingsAPI.loadSettings();
+          settings = await window.settingsAPI.loadSettings();
           if (settings.audioQuality) {
             setAudioQuality(settings.audioQuality);
             console.log(`📊 Calidad de audio cargada: ${settings.audioQuality}`);
           }
           
-          // Cargar configuración de Discord RPC
-          if (settings.discordRPCEnabled !== undefined) {
-            setDiscordRPCEnabled(settings.discordRPCEnabled);
-            console.log(`🎮 Discord RPC cargado: ${settings.discordRPCEnabled}`);
-          }
+          // ARREGLADO: Cargar configuración de Discord RPC con fallback apropiado
+          const discordRPCValue = settings.discordRPCEnabled !== undefined ? settings.discordRPCEnabled : true;
+          setDiscordRPCEnabled(discordRPCValue);
+          console.log(`🎮 Discord RPC cargado: ${discordRPCValue}`);
+
+          // ARREGLADO: Cargar configuraciones del sistema con fallbacks apropiados
+          const autoStartupValue = settings.autoStartup !== undefined ? settings.autoStartup : 'no';
+          setAutoStartup(autoStartupValue);
+          console.log(`🚀 Auto-startup cargado: ${autoStartupValue}`);
+
+          const minimizeToTrayValue = settings.minimizeToTray !== undefined ? settings.minimizeToTray : false;
+          setMinimizeToTray(minimizeToTrayValue);
+          console.log(`📱 Minimize to tray cargado: ${minimizeToTrayValue}`);
+        } else {
+          // Si no hay API, usar valores por defecto
+          setDiscordRPCEnabled(true);
+          setAutoStartup('no');
+          setMinimizeToTray(false);
+          console.log('⚠️ Settings API no disponible, usando valores por defecto');
         }
 
-        // Verificar estado de conexión de Discord RPC
+        // Verificar estado de conexión de Discord RPC (sin sobrescribir la configuración)
         if (window.discordRPCAPI) {
-          const enabled = await window.discordRPCAPI.isEnabled();
+          // ARREGLADO: Solo verificar conexión, NO sobrescribir la configuración cargada
           const connected = await window.discordRPCAPI.isConnected();
-          setDiscordRPCEnabled(enabled);
           setDiscordRPCConnected(connected);
+          
+          // ARREGLADO: Sincronizar el servicio RPC con la configuración guardada
+          // Usar el valor de discordRPCEnabled que ya se estableció en el estado
+          const currentDiscordRPCEnabled = settings?.discordRPCEnabled !== undefined ? settings.discordRPCEnabled : true;
+          await window.discordRPCAPI.setEnabled(currentDiscordRPCEnabled);
+          console.log(`🔄 Sincronizando Discord RPC con configuración guardada: ${currentDiscordRPCEnabled}`);
         }
+
+        // NUEVO: Verificar que la configuración del sistema esté sincronizada con la configuración guardada
+        if (window.systemAPI && settings && settings.autoStartup) {
+          try {
+            const currentSystemStartup = await window.systemAPI.getAutoStartupStatus();
+            if (currentSystemStartup !== settings.autoStartup) {
+              // Sincronizar la configuración del sistema con la configuración guardada
+              console.log(`🔄 Sincronizando auto-startup: configuración=${settings.autoStartup}, sistema=${currentSystemStartup}`);
+              await window.systemAPI.setAutoStartup(settings.autoStartup);
+            }
+          } catch (error) {
+            console.error("Error sincronizando auto-startup:", error);
+          }
+        }
+        // NUEVO: Marcar configuraciones como cargadas
+        setSettingsLoaded(true);
+        console.log('✅ Configuraciones cargadas completamente');
+        
       } catch (error) {
         console.error("Error cargando configuraciones:", error);
+        // Establecer valores por defecto en caso de error
+        setDiscordRPCEnabled(true);
+        setAutoStartup('no');
+        setMinimizeToTray(false);
+        setSettingsLoaded(true);
       }
     };
 
@@ -170,6 +218,14 @@ export function SettingsView({
           setDiscordRPCConnected(connected);
         }, 1000);
       }
+      
+      // NUEVO: Guardar también en el archivo de configuraciones para persistencia
+      if (window.settingsAPI) {
+        const currentSettings = await window.settingsAPI.loadSettings();
+        currentSettings.discordRPCEnabled = newEnabled;
+        await window.settingsAPI.saveSettings(currentSettings);
+        console.log(`💾 Discord RPC guardado en configuraciones: ${newEnabled}`);
+      }
     } catch (error) {
       console.error("Error configurando Discord RPC:", error);
     }
@@ -204,6 +260,52 @@ export function SettingsView({
       setCompressionResult("❌ Error durante la compresión");
       setIsCompressing(false);
       setCompressionProgress(null);
+    }
+  };
+
+  // NUEVO: Handlers para configuraciones del sistema
+  const handleAutoStartupChange = async (mode: 'no' | 'yes' | 'minimized') => {
+    try {
+      setAutoStartup(mode);
+      
+      // Configurar en el sistema
+      if (window.systemAPI) {
+        await window.systemAPI.setAutoStartup(mode);
+        console.log(`🚀 Auto-startup configurado a: ${mode}`);
+      }
+      
+      // NUEVO: Guardar también en el archivo de configuraciones para persistencia
+      if (window.settingsAPI) {
+        const currentSettings = await window.settingsAPI.loadSettings();
+        currentSettings.autoStartup = mode;
+        await window.settingsAPI.saveSettings(currentSettings);
+        console.log(`💾 Auto-startup guardado en configuraciones: ${mode}`);
+      }
+    } catch (error) {
+      console.error("Error configurando auto-startup:", error);
+    }
+  };
+
+  const handleMinimizeToTrayToggle = async () => {
+    try {
+      const newValue = !minimizeToTray;
+      setMinimizeToTray(newValue);
+      
+      // Configurar en el sistema
+      if (window.systemAPI) {
+        await window.systemAPI.setMinimizeToTray(newValue);
+        console.log(`📱 Minimize to tray configurado a: ${newValue}`);
+      }
+      
+      // NUEVO: Guardar también en el archivo de configuraciones para persistencia
+      if (window.settingsAPI) {
+        const currentSettings = await window.settingsAPI.loadSettings();
+        currentSettings.minimizeToTray = newValue;
+        await window.settingsAPI.saveSettings(currentSettings);
+        console.log(`💾 Minimize to tray guardado en configuraciones: ${newValue}`);
+      }
+    } catch (error) {
+      console.error("Error configurando minimize to tray:", error);
     }
   };
 
@@ -299,39 +401,46 @@ export function SettingsView({
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              <div>
-                <p className="font-medium text-gray-900 dark:text-gray-100">
-                  Rich Presence
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {discordRPCConnected 
-                    ? "Conectado - Mostrando tu música actual" 
-                    : discordRPCEnabled 
-                      ? "Habilitado - Intentando conectar..."
-                      : "Deshabilitado"
-                  }
-                </p>
+          {settingsLoaded && discordRPCEnabled !== null ? (
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    Rich Presence
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {discordRPCConnected 
+                      ? "Conectado - Mostrando tu música actual" 
+                      : discordRPCEnabled 
+                        ? "Habilitado - Intentando conectar..."
+                        : "Deshabilitado"
+                    }
+                  </p>
+                </div>
               </div>
-            </div>
-            
-            <button
-              onClick={handleDiscordRPCToggle}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                discordRPCEnabled ? 'bg-indigo-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  discordRPCEnabled ? 'translate-x-6' : 'translate-x-1'
+              
+              <button
+                onClick={handleDiscordRPCToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                  discordRPCEnabled ? 'bg-indigo-600' : 'bg-gray-200'
                 }`}
-              />
-            </button>
-          </div>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    discordRPCEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg animate-pulse">
+              <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+              <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
+            </div>
+          )}
 
-          {discordRPCEnabled && (
+          {settingsLoaded && discordRPCEnabled === true && (
             <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
               <p className="text-sm text-indigo-800 dark:text-indigo-200">
                 <strong>Nota:</strong> Discord debe estar abierto para mostrar tu actividad musical. 
@@ -507,6 +616,130 @@ export function SettingsView({
                 </>
               )}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* NUEVO: Configuraciones del Sistema */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+              <Power className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Configuraciones del Sistema
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Controla el comportamiento de la aplicación en tu sistema
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* Auto-startup */}
+            {settingsLoaded && autoStartup !== null ? (
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <Power className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                        Iniciar automáticamente al encender el ordenador
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Configura como se inicia Music Player con tu sistema
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {([
+                    { value: 'no', label: 'No', description: 'No iniciar automáticamente' },
+                    { value: 'yes', label: 'Sí', description: 'Iniciar normalmente' },
+                    { value: 'minimized', label: 'Minimizado', description: 'Iniciar en la bandeja del sistema' }
+                  ] as const).map((option) => (
+                    <div
+                      key={option.value}
+                      className={`p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                        autoStartup === option.value
+                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                      onClick={() => handleAutoStartupChange(option.value)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                            {option.label}
+                          </h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {option.description}
+                          </p>
+                        </div>
+                        <div className={`w-4 h-4 rounded-full border-2 ${
+                          autoStartup === option.value 
+                            ? 'bg-orange-500 border-orange-500' 
+                            : 'border-gray-300 dark:border-gray-500'
+                        }`} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg animate-pulse">
+                <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+                <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
+              </div>
+            )}
+
+            {/* Minimize to tray */}
+            {settingsLoaded && minimizeToTray !== null ? (
+              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Minimize2 className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
+                      El botón cerrar debe minimizar la aplicación
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Al cerrar, mantener la aplicación en la bandeja del sistema
+                    </p>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleMinimizeToTrayToggle}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
+                    minimizeToTray ? 'bg-orange-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      minimizeToTray ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg animate-pulse">
+                <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
+                <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-2/3"></div>
+              </div>
+            )}
+
+            {settingsLoaded && minimizeToTray === true && (
+              <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                <p className="text-sm text-orange-800 dark:text-orange-200">
+                  <strong>Nota:</strong> Cuando esta opción esté activada, cerrar la ventana mantendrá 
+                  la aplicación funcionando en la bandeja del sistema. Puedes acceder a ella haciendo 
+                  clic en el ícono de la bandeja o usar "Salir" desde el menú contextual para cerrarla completamente.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

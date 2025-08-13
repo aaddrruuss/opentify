@@ -22,6 +22,8 @@ export interface Settings {
   isDarkMode: boolean;
   audioQuality?: 'low' | 'medium' | 'high'; // NUEVO: Configuración de calidad de audio
   discordRPCEnabled?: boolean; // NUEVO: Discord Rich Presence
+  autoStartup?: 'no' | 'yes' | 'minimized'; // NUEVO: Auto-inicio del sistema
+  minimizeToTray?: boolean; // NUEVO: Minimizar a la bandeja del sistema
   lastPlayedTrack?: Track | null;
   lastPlayedPosition?: number;
   lastPlayedTime?: number; // timestamp when app was closed
@@ -116,6 +118,16 @@ interface DiscordRPCAPI {
   isConnected: () => Promise<boolean>;
 }
 
+// NUEVO: Interfaz para funcionalidades del sistema
+interface SystemAPI {
+  setAutoStartup: (mode: 'no' | 'yes' | 'minimized') => Promise<boolean>;
+  getAutoStartupStatus: () => Promise<'no' | 'yes' | 'minimized'>;
+  showWindow: () => Promise<void>;
+  hideWindow: () => Promise<void>;
+  minimizeToTray: () => Promise<void>;
+  setMinimizeToTray: (enabled: boolean) => Promise<boolean>;
+}
+
 declare global {
   interface Window {
     musicAPI: MusicAPI;
@@ -124,6 +136,7 @@ declare global {
     importManagerAPI?: ImportManagerAPI;
     storageAPI: StorageAPI;
     discordRPCAPI: DiscordRPCAPI; // NUEVO: Discord RPC API
+    systemAPI: SystemAPI; // NUEVO: System API
     electronAPI?: {
       on: (channel: string, listener: (...args: any[]) => void) => void;
       removeListener: (channel: string, listener: (...args: any[]) => void) => void;

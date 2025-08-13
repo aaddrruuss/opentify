@@ -87,17 +87,7 @@ export function App() {
     [isPlaying, isPreloadingNext, playlist.length, isDownloading]
   );
 
-  // Throttled settings save
-  const throttledSaveSettings = useMemo(
-    () => throttle(async (settings: Settings) => {
-      try {
-        await window.settingsAPI.saveSettings(settings);
-      } catch (error) {
-        console.error("Error guardando configuraciones:", error);
-      }
-    }, 2000), // Guardar máximo cada 2 segundos
-    []
-  );
+  // Función de throttle para guardar configuraciones - ahora se usa inline
 
   // Debounced search
   const debouncedSearch = useMemo(
@@ -173,23 +163,39 @@ export function App() {
     return () => { mounted = false; };
   }, []);
 
-  // Guardar configuraciones (optimizado)
+  // Guardar configuraciones (CORREGIDO: preservar configuraciones existentes)
   useEffect(() => {
     if (!settingsLoaded) return;
 
-    const settings: Settings = {
-      volume,
-      isMuted,
-      repeatMode,
-      isShuffle,
-      isDarkMode,
-      lastPlayedTrack: currentTrack,
-      lastPlayedPosition: currentTime,
-      lastPlayedTime: Date.now()
+    const saveSettingsAsync = async () => {
+      try {
+        // ARREGLADO: Cargar configuraciones existentes primero
+        const currentSettings = await window.settingsAPI.loadSettings();
+        
+        // ARREGLADO: Solo actualizar los campos relacionados con la música/app, preservar configuraciones del usuario
+        const updatedSettings: Settings = {
+          ...currentSettings, // Preservar TODAS las configuraciones existentes
+          // Solo actualizar los campos de estado de la aplicación
+          volume,
+          isMuted,
+          repeatMode,
+          isShuffle,
+          isDarkMode,
+          lastPlayedTrack: currentTrack,
+          lastPlayedPosition: currentTime,
+          lastPlayedTime: Date.now()
+        };
+
+        await window.settingsAPI.saveSettings(updatedSettings);
+      } catch (error) {
+        console.error("Error guardando configuraciones:", error);
+      }
     };
 
-    throttledSaveSettings(settings);
-  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded, throttledSaveSettings]);
+    // Crear throttled version de la función async
+    const throttledAsyncSave = throttle(saveSettingsAsync, 2000);
+    throttledAsyncSave();
+  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded]);
 
   // Aplicar modo oscuro (optimizado)
   useEffect(() => {

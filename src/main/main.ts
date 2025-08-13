@@ -1,10 +1,93 @@
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell, Tray, Menu, nativeImage } from "electron";
 import path from "path";
 import fs from "fs";
 import { setupIpcHandlers } from './ipcHandlers';
 import { setupImportManagerHandlers, importManager } from './importManager';
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuiting = false;
+
+// NUEVO: Configurar switches para evitar suspensión en background ANTES de app.whenReady
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
+function createTray() {
+  const iconPath = path.join(__dirname, "../icon.png");
+  
+  // Crear el ícono para el tray
+  let trayIcon;
+  if (fs.existsSync(iconPath)) {
+    trayIcon = nativeImage.createFromPath(iconPath);
+    // Redimensionar el ícono para el tray (16x16 en Windows)
+    trayIcon = trayIcon.resize({ width: 16, height: 16 });
+  } else {
+    // Crear un ícono simple si no se encuentra el archivo
+    trayIcon = nativeImage.createFromNamedImage('NSComputer', [16, 16]);
+  }
+  
+  tray = new Tray(trayIcon);
+  
+  // Crear el menú contextual del tray
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Music Player',
+      enabled: false
+    },
+    {
+      type: 'separator'
+    },
+    {
+      label: 'Mostrar',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+          // ARREGLADO: Resetear isQuiting cuando se muestra la ventana desde el menú
+          isQuiting = false;
+        }
+      }
+    },
+    {
+      label: 'Ocultar',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.hide();
+        }
+      }
+    },
+    {
+      type: 'separator'
+    },
+    {
+      label: 'Salir',
+      click: () => {
+        isQuiting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  tray.setContextMenu(contextMenu);
+  tray.setToolTip('Music Player');
+  
+  // Hacer clic en el tray para mostrar/ocultar la ventana
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+        // ARREGLADO: Resetear isQuiting cuando se muestra la ventana desde el tray
+        isQuiting = false;
+      }
+    }
+  });
+  
+  console.log('✅ System tray created');
+}
 
 function createWindow() {
   const iconPath = path.join(__dirname, "../icon.png");
@@ -46,9 +129,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: false,
-      // Optimizaciones de rendimiento
+      // Optimizaciones de rendimiento para tray
       backgroundThrottling: false, // Evitar throttling en background
       experimentalFeatures: false,
+      // NUEVO: Permitir que el audio continúe cuando está oculto
+      // paintWhenInitiallyHidden: true, // Removed: not a valid WebPreferences property
     },
     show: false, // No mostrar hasta que esté listo
   });
@@ -130,11 +215,56 @@ function createWindow() {
     }
   });
 
+  // ARREGLADO: Resetear isQuiting cuando la ventana se muestra
+  mainWindow.on('show', () => {
+    isQuiting = false;
+    console.log('🔄 Window shown, reset isQuiting to false');
+  });
+
   // Optimizar garbage collection
   mainWindow.webContents.on('dom-ready', () => {
     // Forzar garbage collection después de cargar
     if (global.gc) {
       global.gc();
+    }
+  });
+
+  // Manejar el evento de cierre
+  mainWindow.on('close', (event) => {
+    try {
+      // Cargar configuraciones para verificar si minimizar a tray está habilitado
+      const ipcHandlers = require('./ipcHandlers');
+      if (ipcHandlers && typeof ipcHandlers.loadSettings === 'function') {
+        const settings = ipcHandlers.loadSettings();
+        
+        if (settings && settings.minimizeToTray && !isQuiting) {
+          // Si minimize to tray está habilitado, prevenir el cierre y ocultar
+          event.preventDefault();
+          mainWindow?.hide();
+          console.log('🔽 Window minimized to tray');
+        } else if (!isQuiting) {
+          // Si minimize to tray está deshabilitado, realmente cerrar la aplicación
+          console.log('🚪 Closing application (minimize to tray disabled)');
+          isQuiting = true;
+          // Destruir el tray para que no quede el icono
+          if (tray) {
+            tray.destroy();
+            tray = null;
+          }
+          app.quit();
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error checking minimize to tray setting:', error);
+      // En caso de error, cerrar la aplicación normalmente
+      if (!isQuiting) {
+        isQuiting = true;
+        if (tray) {
+          tray.destroy();
+          tray = null;
+        }
+        app.quit();
+      }
     }
   });
 
@@ -152,15 +282,30 @@ app.whenReady().then(() => {
   app.setAppUserModelId('com.adrus.musicplayer');
   
   createWindow();
+  createTray(); // Crear el system tray
+  
+  // Verificar si se inició con --hidden
+  if (process.argv.includes('--hidden')) {
+    console.log('🔽 Starting minimized to tray');
+    if (mainWindow) {
+      mainWindow.hide();
+    }
+  }
 });
 
 app.on("before-quit", () => {
+  isQuiting = true;
   console.log("App closing - settings should be saved automatically");
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  // En macOS es común que las apps permanezcan activas incluso cuando todas las ventanas estén cerradas
+  // En otros sistemas, solo salir si no tenemos tray o si está marcado para salir
+  if (process.platform !== "darwin" && isQuiting) {
     app.quit();
+  } else if (!isQuiting) {
+    // NUEVO: Si no estamos saliendo realmente, mantener la app activa para reproducir música
+    console.log('🎵 App continues running in background for music playback');
   }
 });
 
@@ -170,7 +315,7 @@ app.on("activate", () => {
   }
 });
 
-// Limpieza de memoria cada 10 minutos en desarrollo
+// Limpieza de memoria cada 10 minutos en desarrollo - deshuso
 if (process.env.NODE_ENV === 'development') {
   setInterval(() => {
     if (global.gc) {

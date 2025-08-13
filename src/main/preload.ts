@@ -76,6 +76,22 @@ try {
     isConnected: () => ipcRenderer.invoke('discord-rpc-is-connected'),
   });
 
+  // NUEVO: API para funcionalidades del sistema
+  contextBridge.exposeInMainWorld('systemAPI', {
+    setAutoStartup: (mode: 'no' | 'yes' | 'minimized') => 
+      ipcRenderer.invoke('system-set-auto-startup', mode),
+    getAutoStartupStatus: () => 
+      ipcRenderer.invoke('system-get-auto-startup'),
+    showWindow: () => 
+      ipcRenderer.invoke('system-show-window'),
+    hideWindow: () => 
+      ipcRenderer.invoke('system-hide-window'),
+    minimizeToTray: () => 
+      ipcRenderer.invoke('system-minimize-to-tray'),
+    setMinimizeToTray: (enabled: boolean) => 
+      ipcRenderer.invoke('system-set-minimize-to-tray', enabled),
+  });
+
   console.log("✅ Preload script configurado correctamente");
 
 } catch (error) {

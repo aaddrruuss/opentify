@@ -182,6 +182,8 @@ const defaultSettings = {
   isDarkMode: false,
   audioQuality: "medium" as 'low' | 'medium' | 'high', // NUEVO: Configuración de calidad de audio
   discordRPCEnabled: true, // NUEVO: Discord Rich Presence habilitado por defecto
+  autoStartup: "no" as 'no' | 'yes' | 'minimized', // NUEVO: Auto-inicio del sistema
+  minimizeToTray: false, // NUEVO: Minimizar a la bandeja del sistema
   lastPlayedTrack: null,
   lastPlayedPosition: 0,
   lastPlayedTime: null
@@ -211,20 +213,23 @@ function loadSettings() {
   return defaultSettings;
 }
 
-// Función para guardar configuraciones
+// Función para guardar configuraciones (CORREGIDA: preservar todas las configuraciones existentes)
 function saveSettings(settings: typeof defaultSettings) {
   ensureSettingsDirectoryExists();
   const settingsPath = getSettingsFilePath();
 
-  // SOLUCIÓN: Si falta audioQuality, restaurar el valor actual o el default
-  if (!settings.audioQuality) {
-    const lastSettings = loadSettings();
-    settings.audioQuality = lastSettings.audioQuality || defaultSettings.audioQuality;
-  }
-
   try {
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
-    console.log("Configuraciones guardadas:", settings);
+    // ARREGLADO: Cargar configuraciones existentes primero
+    const existingSettings = loadSettings();
+    
+    // ARREGLADO: Combinar configuraciones existentes con las nuevas
+    const mergedSettings = {
+      ...existingSettings, // Preservar TODAS las configuraciones existentes
+      ...settings          // Sobrescribir solo los campos proporcionados
+    };
+
+    fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
+    console.log("Configuraciones guardadas (preservando existentes):", mergedSettings);
   } catch (error) {
     console.error("Error guardando configuraciones:", error);
   }
@@ -1295,7 +1300,65 @@ class DownloadManager {
     }
   }
 
+// Función para manejar auto-startup
+function setAutoStartup(mode: 'no' | 'yes' | 'minimized'): boolean {
+  try {
+    const appPath = app.getPath('exe');
+    const loginItemSettings = app.getLoginItemSettings();
+    
+    if (mode === 'no') {
+      app.setLoginItemSettings({
+        openAtLogin: false,
+      });
+    } else {
+      const args = mode === 'minimized' ? ['--hidden'] : [];
+      app.setLoginItemSettings({
+        openAtLogin: true,
+        path: appPath,
+        args: args
+      });
+    }
+    
+    console.log(`✅ Auto-startup set to: ${mode}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Error setting auto-startup:', error);
+    return false;
+  }
+}
+
+function getAutoStartupStatus(): 'no' | 'yes' | 'minimized' {
+  try {
+    const loginItemSettings = app.getLoginItemSettings();
+    
+    if (!loginItemSettings.openAtLogin) {
+      return 'no';
+    }
+    
+    // Verificar si tiene argumentos para arranque minimizado
+    if (loginItemSettings.executableWillLaunchAtLogin) {
+      const settings = loadSettings();
+      return settings.autoStartup || 'yes';
+    }
+    
+    return 'yes';
+  } catch (error) {
+    console.error('❌ Error getting auto-startup status:', error);
+    return 'no';
+  }
+}
+
+export { loadSettings };
+
+let handlersRegistered = false;
+
 export function setupIpcHandlers() {
+  if (handlersRegistered) {
+    console.log('⚠️ IPC handlers already registered, skipping...');
+    return;
+  }
+  
+  handlersRegistered = true;
   // Limpiar archivos huérfanos al iniciar
   downloadManager.cleanupOrphanedFiles();
 
@@ -1621,6 +1684,110 @@ export function setupIpcHandlers() {
     }
   });
 
+  // NUEVO: Registrar handlers del sistema con protección contra errores
+  const systemHandlers = [
+    {
+      name: "system-set-auto-startup",
+      handler: async (event: any, mode: 'no' | 'yes' | 'minimized') => {
+        try {
+          const success = setAutoStartup(mode);
+          
+          // Guardar la configuración
+          if (success) {
+            const currentSettings = loadSettings();
+            currentSettings.autoStartup = mode;
+            saveSettings(currentSettings);
+          }
+          
+          return success;
+        } catch (error) {
+          console.error("Error setting auto-startup:", error);
+          return false;
+        }
+      }
+    },
+    {
+      name: "system-get-auto-startup",
+      handler: async () => {
+        try {
+          return getAutoStartupStatus();
+        } catch (error) {
+          console.error("Error getting auto-startup status:", error);
+          return 'no';
+        }
+      }
+    },
+    {
+      name: "system-show-window",
+      handler: async () => {
+        try {
+          const { BrowserWindow } = require('electron');
+          const windows = BrowserWindow.getAllWindows();
+          if (windows.length > 0) {
+            windows[0].show();
+            windows[0].focus();
+          }
+        } catch (error) {
+          console.error("Error showing window:", error);
+        }
+      }
+    },
+    {
+      name: "system-hide-window",
+      handler: async () => {
+        try {
+          const { BrowserWindow } = require('electron');
+          const windows = BrowserWindow.getAllWindows();
+          if (windows.length > 0) {
+            windows[0].hide();
+          }
+        } catch (error) {
+          console.error("Error hiding window:", error);
+        }
+      }
+    },
+    {
+      name: "system-minimize-to-tray",
+      handler: async () => {
+        try {
+          const { BrowserWindow } = require('electron');
+          const windows = BrowserWindow.getAllWindows();
+          if (windows.length > 0) {
+            windows[0].hide();
+          }
+        } catch (error) {
+          console.error("Error minimizing to tray:", error);
+        }
+      }
+    },
+    {
+      name: "system-set-minimize-to-tray",
+      handler: async (event: any, enabled: boolean) => {
+        try {
+          const currentSettings = loadSettings();
+          currentSettings.minimizeToTray = enabled;
+          saveSettings(currentSettings);
+          
+          console.log(`✅ Minimize to tray set to: ${enabled}`);
+          return true;
+        } catch (error) {
+          console.error("Error setting minimize to tray:", error);
+          return false;
+        }
+      }
+    }
+  ];
+
+  // Registrar cada handler del sistema individualmente
+  for (const { name, handler } of systemHandlers) {
+    try {
+      ipcMain.handle(name, handler);
+      console.log(`✅ System handler registered: ${name}`);
+    } catch (error) {
+      console.error(`❌ Error registering system handler ${name}:`, error);
+    }
+  }
+
   // Inicializar Discord RPC basado en la configuración
   const discordSettings = loadSettings();
   if (discordSettings.discordRPCEnabled !== false) { // Habilitar por defecto
@@ -1628,7 +1795,18 @@ export function setupIpcHandlers() {
       discordRPCService.connect();
     }, 2000); // Esperar 2 segundos después del inicio
   }
+
+  console.log("✅ Handlers de IPC básicos registrados");
+  
+  // Registrar handlers adicionales que estaban fuera
+  registerAdditionalHandlers();
+  
+  console.log("✅ Todos los handlers de IPC registrados");
 }
+
+// MOVED: Handlers que estaban fuera de setupIpcHandlers - ahora los movemos dentro
+// Se debe llamar desde setupIpcHandlers() al final
+export function registerAdditionalHandlers() {
   ipcMain.handle("get-storage-stats", async () => {
     // Implementación básica para obtener estadísticas de almacenamiento
     try {
@@ -1639,15 +1817,20 @@ export function setupIpcHandlers() {
         const stats = fs.statSync(path.join(songsDir, file));
         totalSize += stats.size;
       }
+      const totalSizeMB = totalSize / (1024 * 1024);
+      const avgFileSizeMB = files.length > 0 ? totalSizeMB / files.length : 0;
+      
       return {
         totalFiles: files.length,
-        totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
+        totalSizeMB: totalSizeMB.toFixed(2),
+        avgFileSizeMB: avgFileSizeMB.toFixed(2)
       };
     } catch (error) {
       console.error("Error getting storage stats:", error);
       return {
         totalFiles: 0,
-        totalSizeMB: "0"
+        totalSizeMB: "0",
+        avgFileSizeMB: "0"
       };
     }
   });
@@ -1725,133 +1908,5 @@ export function setupIpcHandlers() {
       }
     }
   });
-
-  // OPTIMIZADO: Handler con mejor feedback
-  ipcMain.handle("compress-existing-files", async (event, quality: 'low' | 'medium' | 'high') => {
-    try {
-      // NUEVO: Función para enviar progreso en tiempo real
-      const sendProgress = (progress: { processed: number, total: number, current: string, success: number, failed: number }) => {
-        event.sender.send('compression-progress', progress);
-      };
-      
-      // NUEVO: Ejecutar compresión con callback de progreso
-      const result = await compressExistingFiles(quality, sendProgress);
-      
-      // NUEVO: Enviar evento de finalización explícito
-      event.sender.send('compression-completed', result);
-      
-      console.log("🎯 Compresión finalizada, eventos enviados al frontend");
-      
-      return result;
-    } catch (error) {
-      console.error("Error en handler de compresión:", error);
-      
-      // NUEVO: Enviar evento de error para limpiar UI
-      event.sender.send('compression-completed', { success: 0, failed: 0, spaceSaved: 0 });
-      
-      return { success: 0, failed: 0, spaceSaved: 0 };
-    }
-  });
-
-  // Discord Rich Presence handlers
-  ipcMain.handle("discord-rpc-connect", async () => {
-    try {
-      return await discordRPCService.connect();
-    } catch (error) {
-      console.error("Error connecting Discord RPC:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-disconnect", async () => {
-    try {
-      await discordRPCService.disconnect();
-      return true;
-    } catch (error) {
-      console.error("Error disconnecting Discord RPC:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-set-enabled", async (event, enabled: boolean) => {
-    try {
-      discordRPCService.setEnabled(enabled);
-      
-      // Guardar la configuración
-      const currentSettings = loadSettings();
-      currentSettings.discordRPCEnabled = enabled;
-      saveSettings(currentSettings);
-      
-      return true;
-    } catch (error) {
-      console.error("Error setting Discord RPC enabled:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-update-presence", async (event, trackInfo) => {
-    try {
-      discordRPCService.updatePresence(trackInfo);
-      return true;
-    } catch (error) {
-      console.error("Error updating Discord RPC presence:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-clear-presence", async () => {
-    try {
-      discordRPCService.clearPresence();
-      return true;
-    } catch (error) {
-      console.error("Error clearing Discord RPC presence:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-update-play-state", async (event, isPlaying: boolean) => {
-    try {
-      discordRPCService.updatePlayState(isPlaying);
-      return true;
-    } catch (error) {
-      console.error("Error updating Discord RPC play state:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-update-position", async (event, position: number) => {
-    try {
-      discordRPCService.updatePosition(position);
-      return true;
-    } catch (error) {
-      console.error("Error updating Discord RPC position:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-is-enabled", async () => {
-    try {
-      return discordRPCService.isRPCEnabled();
-    } catch (error) {
-      console.error("Error getting Discord RPC enabled status:", error);
-      return false;
-    }
-  });
-
-  ipcMain.handle("discord-rpc-is-connected", async () => {
-    try {
-      return discordRPCService.isRPCConnected();
-    } catch (error) {
-      console.error("Error getting Discord RPC connection status:", error);
-      return false;
-    }
-  });
-
-  // Inicializar Discord RPC basado en la configuración
-  const discordSettings = loadSettings();
-  if (discordSettings.discordRPCEnabled !== false) { // Habilitar por defecto
-    setTimeout(() => {
-      discordRPCService.connect();
-    }, 2000); // Esperar 2 segundos después del inicio
-  }
+}
 
