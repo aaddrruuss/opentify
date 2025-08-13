@@ -388,8 +388,8 @@ export function SettingsView({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-              <MessageSquare className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -422,8 +422,8 @@ export function SettingsView({
               
               <button
                 onClick={handleDiscordRPCToggle}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
-                  discordRPCEnabled ? 'bg-indigo-600' : 'bg-gray-200'
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:ring-offset-2 ${
+                  discordRPCEnabled ? 'bg-[#2196F3]' : 'bg-gray-200'
                 }`}
               >
                 <span
@@ -441,8 +441,8 @@ export function SettingsView({
           )}
 
           {settingsLoaded && discordRPCEnabled === true && (
-            <div className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-              <p className="text-sm text-indigo-800 dark:text-indigo-200">
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
                 <strong>Nota:</strong> Discord debe estar abierto para mostrar tu actividad musical. 
                 La información se actualiza automáticamente mientras reproduces música.
               </p>
@@ -455,8 +455,8 @@ export function SettingsView({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <Download className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <Download className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -509,8 +509,8 @@ export function SettingsView({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-              <HardDrive className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <HardDrive className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -590,8 +590,8 @@ export function SettingsView({
 
           {/* Resultado de compresión */}
           {compressionResult && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <pre className="text-sm text-green-800 dark:text-green-200 whitespace-pre-line">
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <pre className="text-sm text-blue-800 dark:text-blue-200 whitespace-pre-line">
                 {compressionResult}
               </pre>
             </div>
@@ -602,7 +602,7 @@ export function SettingsView({
             <button
               onClick={handleCompressExisting}
               disabled={isCompressing}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCompressing ? (
                 <>
@@ -624,8 +624,8 @@ export function SettingsView({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-              <Power className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <Power className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -665,7 +665,7 @@ export function SettingsView({
                       key={option.value}
                       className={`p-3 rounded-lg border-2 cursor-pointer transition-colors ${
                         autoStartup === option.value
-                          ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                          ? 'border-[#2196F3] bg-blue-50 dark:bg-blue-900/20'
                           : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                       }`}
                       onClick={() => handleAutoStartupChange(option.value)}
@@ -681,7 +681,7 @@ export function SettingsView({
                         </div>
                         <div className={`w-4 h-4 rounded-full border-2 ${
                           autoStartup === option.value 
-                            ? 'bg-orange-500 border-orange-500' 
+                            ? 'bg-[#2196F3] border-[#2196F3]' 
                             : 'border-gray-300 dark:border-gray-500'
                         }`} />
                       </div>
@@ -713,8 +713,8 @@ export function SettingsView({
                 
                 <button
                   onClick={handleMinimizeToTrayToggle}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 ${
-                    minimizeToTray ? 'bg-orange-500' : 'bg-gray-200'
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:ring-offset-2 ${
+                    minimizeToTray ? 'bg-[#2196F3]' : 'bg-gray-200'
                   }`}
                 >
                   <span
@@ -732,8 +732,8 @@ export function SettingsView({
             )}
 
             {settingsLoaded && minimizeToTray === true && (
-              <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                <p className="text-sm text-orange-800 dark:text-orange-200">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
                   <strong>Nota:</strong> Cuando esta opción esté activada, cerrar la ventana mantendrá 
                   la aplicación funcionando en la bandeja del sistema. Puedes acceder a ella haciendo 
                   clic en el ícono de la bandeja o usar "Salir" desde el menú contextual para cerrarla completamente.

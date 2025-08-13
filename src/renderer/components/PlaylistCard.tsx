@@ -1,6 +1,6 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Music, Edit2, Check, X, Play, MoreHorizontal } from 'lucide-react';
-import { Track } from '../types/index';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { Music, Edit2, Check, X, Play, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react';
+import { Track, PlaylistSettings } from '../types/index';
 
 interface PlaylistCardProps {
   name: string;
@@ -11,6 +11,9 @@ interface PlaylistCardProps {
   onPlay: () => void;
   onTrackSelect: (track: Track, trackIndex: number) => void;
 }
+
+type SortType = 'default' | 'name' | 'artist' | 'duration';
+type SortOrder = 'asc' | 'desc';
 
 export function PlaylistCard({ 
   name, 
@@ -28,6 +31,31 @@ export function PlaylistCard({
   const [isHovered, setIsHovered] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Estados para ordenamiento
+  const [sortType, setSortType] = useState<SortType>('default');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  
+  // Estados para búsqueda
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Cargar configuraciones de la playlist
+  useEffect(() => {
+    const loadPlaylistSettings = async () => {
+      try {
+        const settings = await window.playlistAPI.loadPlaylistSettings(name);
+        if (settings) {
+          setSortType(settings.sortType);
+          setSortOrder(settings.sortOrder);
+        }
+      } catch (error) {
+        console.log("No hay configuraciones previas para esta playlist");
+      }
+    };
+
+    loadPlaylistSettings();
+  }, [name]);
 
   // Cargar imagen personalizada al montar el componente
   useEffect(() => {
@@ -45,6 +73,18 @@ export function PlaylistCard({
 
     loadCustomImage();
   }, [name]);
+
+  // Cerrar dropdown cuando se hace click fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setShowSortDropdown(false);
+    };
+
+    if (showSortDropdown) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showSortDropdown]);
 
   const handleImageUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -119,6 +159,89 @@ export function PlaylistCard({
     setEditName(name);
     setIsEditing(false);
   }, [name]);
+
+  // Función para guardar configuraciones de la playlist
+  const savePlaylistSettings = useCallback(async (settings: PlaylistSettings) => {
+    try {
+      await window.playlistAPI.savePlaylistSettings(name, settings);
+    } catch (error) {
+      console.error("Error guardando configuraciones de la playlist:", error);
+    }
+  }, [name]);
+
+  // Función para convertir duración a segundos para comparar
+  const durationToSeconds = useCallback((duration: string): number => {
+    if (!duration) return 0;
+    const parts = duration.split(':').map(part => parseInt(part, 10));
+    if (parts.length === 2) {
+      return parts[0] * 60 + parts[1]; // MM:SS
+    } else if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2]; // HH:MM:SS
+    }
+    return 0;
+  }, []);
+
+  // Función para filtrar y ordenar canciones
+  const filteredAndSortedTracks = useMemo(() => {
+    // Primero filtrar por búsqueda
+    let filtered = tracks;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = tracks.filter(track => 
+        track.title.toLowerCase().includes(query) || 
+        track.artist.toLowerCase().includes(query)
+      );
+    }
+
+    // Luego ordenar si es necesario
+    if (sortType === 'default') {
+      return filtered;
+    }
+
+    const sorted = [...filtered].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortType) {
+        case 'name':
+          comparison = a.title.localeCompare(b.title, 'es', { sensitivity: 'base' });
+          break;
+        case 'artist':
+          comparison = a.artist.localeCompare(b.artist, 'es', { sensitivity: 'base' });
+          break;
+        case 'duration':
+          const aDuration = durationToSeconds(a.duration);
+          const bDuration = durationToSeconds(b.duration);
+          comparison = aDuration - bDuration;
+          break;
+        default:
+          return 0;
+      }
+
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
+
+    return sorted;
+  }, [tracks, sortType, sortOrder, searchQuery, durationToSeconds]);
+
+  // Manejar cambio de ordenamiento
+  const handleSortChange = useCallback(async (newSortType: SortType) => {
+    let newSortOrder: SortOrder = 'asc';
+
+    if (sortType === newSortType) {
+      // Si se selecciona el mismo tipo, alternar orden
+      newSortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    }
+
+    setSortType(newSortType);
+    setSortOrder(newSortOrder);
+    setShowSortDropdown(false);
+
+    // Guardar configuraciones
+    await savePlaylistSettings({
+      sortType: newSortType,
+      sortOrder: newSortOrder
+    });
+  }, [sortType, sortOrder, savePlaylistSettings]);
 
   const renderPlaylistImage = () => {
     if (isLoadingImage) {
@@ -346,112 +469,259 @@ export function PlaylistCard({
             onClick={(e) => e.stopPropagation()} // Prevenir que clicks en el modal lo cierren
           >
             {/* Header del modal */}
-            <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-md overflow-hidden">
-                  {renderPlaylistImage()}
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{name}</h2>
-                  <p className="text-gray-500 dark:text-gray-400">
-                    {tracks.length} canción{tracks.length !== 1 ? 'es' : ''}
-                  </p>
+            <div className="p-6 border-b dark:border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-md overflow-hidden">
+                    {renderPlaylistImage()}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{name}</h2>
+                    <p className="text-gray-500 dark:text-gray-400">
+                      {tracks.length} canción{tracks.length !== 1 ? 'es' : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlay();
+                    }}
+                    className="ml-4 px-6 py-2 bg-[#2196F3] text-white rounded-full hover:bg-blue-600 transition-colors flex items-center gap-2 hover:shadow-lg transform hover:scale-105"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    Reproducir
+                  </button>
                 </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onPlay();
+                    onToggleExpand();
                   }}
-                  className="ml-4 px-6 py-2 bg-[#2196F3] text-white rounded-full hover:bg-blue-600 transition-colors flex items-center gap-2 hover:shadow-lg transform hover:scale-105"
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Cerrar"
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  Reproducir
+                  <X className="h-6 w-6" />
                 </button>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleExpand();
-                }}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                title="Cerrar"
-              >
-                <X className="h-6 w-6" />
-              </button>
+              
+              {/* Controles de ordenamiento y búsqueda */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  {/* Información de ordenamiento */}
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    {sortType !== 'default' && (
+                      <span className="flex items-center gap-1">
+                        Ordenado por{' '}
+                        <span className="font-medium">
+                          {sortType === 'name' && 'Nombre'}
+                          {sortType === 'artist' && 'Artista'}
+                          {sortType === 'duration' && 'Duración'}
+                        </span>
+                        {sortOrder === 'asc' ? (
+                          <ArrowUp className="w-3 h-3" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3" />
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Contador de resultados de búsqueda */}
+                  {searchQuery.trim() && (
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {filteredAndSortedTracks.length} de {tracks.length} canciones
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {/* Campo de búsqueda */}
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Buscar canciones..."
+                      className="block w-64 pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2196F3] focus:border-[#2196F3] text-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSearchQuery('');
+                        }}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      >
+                        <X className="h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Dropdown de ordenamiento */}
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSortDropdown(!showSortDropdown);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      <ArrowUpDown className="w-4 h-4" />
+                      Ordenar
+                    </button>
+                    
+                    {showSortDropdown && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-10">
+                        <div className="py-2">
+                          <button
+                            onClick={() => handleSortChange('default')}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                              sortType === 'default' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            Defecto (orden de importación)
+                          </button>
+                          <button
+                            onClick={() => handleSortChange('name')}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                              sortType === 'name' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            Por Nombre (canción)
+                            {sortType === 'name' && (
+                              sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleSortChange('artist')}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                              sortType === 'artist' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            Por Artista
+                            {sortType === 'artist' && (
+                              sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleSortChange('duration')}
+                            className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                              sortType === 'duration' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
+                            }`}
+                          >
+                            Por Duración
+                            {sortType === 'duration' && (
+                              sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Lista de canciones mejorada */}
-            <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 140px)' }}>
-              {tracks.length > 0 ? (
+            <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 180px)' }}>
+              {filteredAndSortedTracks.length > 0 ? (
                 <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {tracks.map((track, index) => (
-                    <button
-                      key={track.id}
-                      onClick={() => {
-                        onTrackSelect(track, index);
-                        // NO cerrar el modal
-                      }}
-                      className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-8 text-center text-sm text-gray-500 dark:text-gray-400 font-medium">
-                          {index + 1}
-                        </div>
-                        
-                        <div className="relative flex-shrink-0">
-                          {track.thumbnail ? (
-                            <img
-                              src={track.thumbnail}
-                              alt={track.title}
-                              className="w-12 h-12 rounded object-cover shadow-sm"
-                              loading="lazy"
-                              onError={(e) => {
-                                const target = e.currentTarget as HTMLImageElement;
-                                target.style.display = 'none';
-                                const musicIcon = target.nextElementSibling as HTMLElement;
-                                if (musicIcon) {
-                                  musicIcon.style.display = 'flex';
-                                }
-                              }}
-                            />
-                          ) : null}
-                          <div 
-                            className="absolute inset-0 w-12 h-12 bg-[#2196F3] dark:bg-blue-600 rounded flex items-center justify-center shadow-sm"
-                            style={{ display: track.thumbnail ? 'none' : 'flex' }}
-                          >
-                            <Music className="w-5 h-5 text-white" />
+                  {filteredAndSortedTracks.map((track, index) => {
+                    // Encontrar el índice original de la canción para onTrackSelect
+                    const originalIndex = tracks.findIndex(t => t.id === track.id);
+                    return (
+                      <button
+                        key={track.id}
+                        onClick={() => {
+                          onTrackSelect(track, originalIndex);
+                          // NO cerrar el modal
+                        }}
+                        className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-8 text-center text-sm text-gray-500 dark:text-gray-400 font-medium">
+                            {index + 1}
+                          </div>
+                          
+                          <div className="relative flex-shrink-0">
+                            {track.thumbnail ? (
+                              <img
+                                src={track.thumbnail}
+                                alt={track.title}
+                                className="w-12 h-12 rounded object-cover shadow-sm"
+                                loading="lazy"
+                                onError={(e) => {
+                                  const target = e.currentTarget as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  const musicIcon = target.nextElementSibling as HTMLElement;
+                                  if (musicIcon) {
+                                    musicIcon.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <div 
+                              className="absolute inset-0 w-12 h-12 bg-[#2196F3] dark:bg-blue-600 rounded flex items-center justify-center shadow-sm"
+                              style={{ display: track.thumbnail ? 'none' : 'flex' }}
+                            >
+                              <Music className="w-5 h-5 text-white" />
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-[#2196F3] transition-colors">
+                              {track.title}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                              {track.artist}
+                            </p>
+                          </div>
+                          
+                          <div className="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0 font-mono">
+                            {track.duration}
+                          </div>
+
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Play className="w-4 h-4 text-[#2196F3]" />
                           </div>
                         </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate group-hover:text-[#2196F3] transition-colors">
-                            {track.title}
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                            {track.artist}
-                          </p>
-                        </div>
-                        
-                        <div className="text-sm text-gray-500 dark:text-gray-400 flex-shrink-0 font-mono">
-                          {track.duration}
-                        </div>
-
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Play className="w-4 h-4 text-[#2196F3]" />
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <Music className="w-16 h-16 text-gray-400 mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400 text-lg">
-                    Esta playlist está vacía
-                  </p>
-                  <p className="text-gray-400 dark:text-gray-500 text-sm">
-                    Agrega algunas canciones para comenzar
-                  </p>
+                  {searchQuery.trim() ? (
+                    <>
+                      <Search className="w-16 h-16 text-gray-400 mb-4" />
+                      <p className="text-gray-500 dark:text-gray-400 text-lg">
+                        No se encontraron canciones
+                      </p>
+                      <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">
+                        No hay canciones que coincidan con "{searchQuery}"
+                      </p>
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Music className="w-16 h-16 text-gray-400 mb-4" />
+                      <p className="text-gray-500 dark:text-gray-400 text-lg">
+                        Esta playlist está vacía
+                      </p>
+                      <p className="text-gray-400 dark:text-gray-500 text-sm">
+                        Agrega algunas canciones para comenzar
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
             </div>

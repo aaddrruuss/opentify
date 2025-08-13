@@ -29,6 +29,11 @@ export interface Settings {
   lastPlayedTime?: number; // timestamp when app was closed
 }
 
+export interface PlaylistSettings {
+  sortType: 'default' | 'name' | 'artist' | 'duration';
+  sortOrder: 'asc' | 'desc';
+}
+
 export interface SettingsAPI {
   loadSettings: () => Promise<Settings>;
   saveSettings: (settings: Settings) => Promise<boolean>;
@@ -42,6 +47,8 @@ export interface PlaylistAPI {
   renamePlaylist: (oldName: string, newName: string) => Promise<boolean>;
   loadPlaylistImage: (name: string) => Promise<string | null>;
   savePlaylistImage: (name: string, imageData: string) => Promise<boolean>;
+  savePlaylistSettings: (name: string, settings: PlaylistSettings) => Promise<boolean>;
+  loadPlaylistSettings: (name: string) => Promise<PlaylistSettings | null>;
 }
 
 export interface MusicLibraryProps {

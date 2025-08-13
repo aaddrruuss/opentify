@@ -1008,6 +1008,52 @@ class DownloadManager {
     }
   }
 
+  // Funciones para configuraciones de playlist
+  async function savePlaylistSettings(playlistName: string, settings: any): Promise<boolean> {
+    try {
+      const playlistDir = getPlaylistPath(playlistName);
+      
+      // Crear directorio para la playlist si no existe
+      if (!fs.existsSync(playlistDir)) {
+        fs.mkdirSync(playlistDir, { recursive: true });
+      }
+      
+      const settingsPath = path.join(playlistDir, 'settings.json');
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+      
+      console.log(`Configuraciones de playlist "${playlistName}" guardadas en:`, settingsPath);
+      return true;
+    } catch (error) {
+      console.error("Error guardando configuraciones de playlist:", error);
+      return false;
+    }
+  }
+
+  async function loadPlaylistSettings(playlistName: string): Promise<any | null> {
+    try {
+      const playlistDir = getPlaylistPath(playlistName);
+      const settingsPath = path.join(playlistDir, 'settings.json');
+      
+      if (!fs.existsSync(settingsPath)) {
+        // Si no hay configuraciones, retornar configuraciones por defecto
+        return {
+          sortType: 'default',
+          sortOrder: 'asc'
+        };
+      }
+      
+      const settingsData = fs.readFileSync(settingsPath, 'utf8');
+      return JSON.parse(settingsData);
+    } catch (error) {
+      console.error("Error cargando configuraciones de playlist:", error);
+      // Retornar configuraciones por defecto en caso de error
+      return {
+        sortType: 'default',
+        sortOrder: 'asc'
+      };
+    }
+  }
+
   // Función auxiliar para obtener el MIME type
   function getMimeType(extension: string): string {
     const mimeTypes: Record<string, string> = {
@@ -1538,6 +1584,15 @@ export function setupIpcHandlers() {
 
   ipcMain.handle("load-playlist-image", async (event, name: string) => {
     return await loadPlaylistImage(name);
+  });
+
+  // Nuevos handlers para configuraciones de playlist
+  ipcMain.handle("save-playlist-settings", async (event, name: string, settings: any) => {
+    return await savePlaylistSettings(name, settings);
+  });
+
+  ipcMain.handle("load-playlist-settings", async (event, name: string) => {
+    return await loadPlaylistSettings(name);
   });
 
   ipcMain.handle("search-music", async (event, query: string) => {

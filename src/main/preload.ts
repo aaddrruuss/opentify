@@ -36,6 +36,8 @@ try {
     renamePlaylist: (oldName: string, newName: string) => ipcRenderer.invoke('rename-playlist', oldName, newName),
     savePlaylistImage: (name: string, imageData: string) => ipcRenderer.invoke('save-playlist-image', name, imageData),
     loadPlaylistImage: (name: string) => ipcRenderer.invoke('load-playlist-image', name),
+    savePlaylistSettings: (name: string, settings: any) => ipcRenderer.invoke('save-playlist-settings', name, settings),
+    loadPlaylistSettings: (name: string) => ipcRenderer.invoke('load-playlist-settings', name),
   });
 
   contextBridge.exposeInMainWorld('importManagerAPI', {
