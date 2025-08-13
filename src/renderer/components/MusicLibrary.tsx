@@ -59,6 +59,12 @@ export const MusicLibrary = memo(({
   const [importedPlaylists, setImportedPlaylists] = useState<{[key: string]: Track[]}>({});
   const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
   const [expandedPlaylists, setExpandedPlaylists] = useState<string[]>([]);
+  const [popularMusic, setPopularMusic] = useState<Track[]>([]); // Estado independiente para música popular
+  const [displayedResults, setDisplayedResults] = useState(10); // Número de resultados mostrados
+  const [manualSearchResults, setManualSearchResults] = useState<Track[]>([]); // Estado para búsquedas manuales
+  // Redefinir los estados `isLoading` y `searchQuery` con sus setters
+  const [isLoadingPopular, setIsLoadingPopular] = useState(false); // Indicador de carga para música popular
+  const [popularQuery, setPopularQuery] = useState("música popular 2025"); // Consulta para el menú principal
 
   // Lazy load playlists only when needed
   useEffect(() => {
@@ -382,47 +388,91 @@ export const MusicLibrary = memo(({
     );
   }, [currentView, importedPlaylists, playlistsLoaded, onTrackSelect, expandedPlaylists, togglePlaylistExpansion, handlePlaylistNameChange]);
 
-  if (currentView === "settings") {
-    return (
-      <SettingsView 
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={onToggleDarkMode}
-        isCompressing={isCompressing}
-        setIsCompressing={setIsCompressing}
-        compressionProgress={compressionProgress}
-        compressionResult={compressionResult}
-        setCompressionResult={setCompressionResult}
-        setCompressionProgress={setCompressionProgress}
-      />
-    );
-  }
+  // Buscamos de manera automatica nada mas cargar el exe 
+  useEffect(() => {
+    const fetchPopularMusic = async () => {
+      try {
+        setIsLoadingPopular(true);
+        const results = await window.musicAPI.searchMusic("canciones populares 2025");
+        setPopularMusic(results.slice(0, 15)); 
+      } catch (error) {
+        console.error("Error en búsqueda automática de música popular:", error);
+      } finally {
+        setIsLoadingPopular(false);
+      }
+    };
+
+    fetchPopularMusic();
+  }, []);
+
+  // Reseteamos las paginas de mostrar mas cuando cambien de pestaña 
+  useEffect(() => {
+    if (currentView === "home") {
+      setDisplayedResults(10);
+    }
+  }, [currentView]);
+
+  const handleShowMore = () => {
+    setDisplayedResults(prev => Math.min(prev + 10, popularMusic.length));
+  };
 
   const renderContent = () => {
     switch (currentView) {
+      case "settings":
+        return (
+          <SettingsView 
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={onToggleDarkMode}
+            isCompressing={isCompressing}
+            setIsCompressing={setIsCompressing}
+            compressionProgress={compressionProgress}
+            compressionResult={compressionResult}
+            setCompressionResult={setCompressionResult}
+            setCompressionProgress={setCompressionProgress}
+          />
+        );
+
       case "home":
         return (
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Bienvenido</h2>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Bienvenid@ de nuevo a Opentify</h2>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border dark:border-gray-700">
               <p className="text-gray-600 dark:text-gray-300 mb-4">
-                Usa la búsqueda para encontrar música online. Las canciones se guardan
-                en cache para una reproducción más rápida. Tu última canción y posición se restaurarán automáticamente.
+                Encuentra música popular online: las canciones se guardan en caché para una carga rápida y se restaura automáticamente la última pista y posición.
               </p>
               <button
-                onClick={() => onSearch("música popular 2024")}
-                className="px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
+                onClick={() => onSearch("musica 2025")}
+                className="flex items-center gap-2 px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
               >
-                Buscar música popular
+                <SearchIcon className="w-5 h-5" />
+                Refrescar música popular
               </button>
             </div>
 
-            {searchQuery && searchResults.length > 0 && (
+            {popularMusic.length > 0 && (
               <section className="mt-8">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Últimas búsquedas</h2>
+                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Canciones más populares:</h2>
                 <TrackList
-                  tracks={searchResults.slice(0, 5)} // Mostrar solo las primeras 5
+                  tracks={popularMusic.slice(0, displayedResults)}
                   onTrackSelect={onTrackSelect}
                 />
+                {displayedResults < popularMusic.length && displayedResults < 100 && (
+                  <div className="text-center mt-6">
+                    <button
+                      onClick={handleShowMore}
+                      className="px-6 py-3 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
+                    >
+                      Mostrar {Math.min(10, popularMusic.length - displayedResults)} canciones más
+                    </button>
+                  </div>
+                )}
+                {displayedResults >= 100 && (
+                  <div className="text-center mt-4">
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      Mostrando máximo 100 resultados
+                    </p>
+                  </div>
+                )}
               </section>
             )}
           </section>
