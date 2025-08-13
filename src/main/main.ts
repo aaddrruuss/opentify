@@ -8,6 +8,28 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuiting = false;
 
+// SINGLE INSTANCE LOCK: Prevenir múltiples procesos de la aplicación
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Si ya hay una instancia corriendo, salir inmediatamente
+  console.log('🔒 Another instance is already running, quitting...');
+  app.quit();
+} else {
+  // Si otra instancia intenta iniciar, enfocar la ventana existente
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    console.log('🔄 Second instance attempted to start, focusing existing window...');
+    // Si hay una ventana principal, mostrarla y enfocarla
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+      // Resetear isQuiting para asegurar que la ventana no se cierre
+      isQuiting = false;
+    }
+  });
+}
+
 // NUEVO: Configurar switches para evitar suspensión en background ANTES de app.whenReady
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
