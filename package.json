@@ -1,7 +1,7 @@
 {
   "name": "music-player",
-  "version": "1.0.0",
-  "description": "",
+  "version": "1.0.1",
+  "description": "A free and open source alternative to other music players or streaming services.",
   "icon": "assets/images/icon.png",
   "main": "dist/main/main.js",
   "scripts": {
