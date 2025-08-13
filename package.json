@@ -1,5 +1,5 @@
 {
-  "name": "music-player",
+  "name": "opentify",
   "version": "1.0.1",
   "description": "A free and open source alternative to other music players or streaming services.",
   "icon": "assets/images/icon.png",
@@ -14,8 +14,8 @@
     "dist": "electron-builder"
   },
   "build": {
-    "appId": "com.adrus.musicplayer",
-    "productName": "Music Player",
+    "appId": "com.adrus.opentify",
+    "productName": "Opentify",
     "directories": {
       "output": "build"
     },

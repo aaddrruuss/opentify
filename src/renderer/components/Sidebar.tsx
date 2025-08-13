@@ -87,7 +87,7 @@ export function Sidebar({
   return (
     <div className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full">
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-[#2196F3]">Music Player</h1>
+        <h1 className="text-2xl font-bold text-[#2196F3]">Opentify</h1>
       </div>
       <nav className="flex-1">
         <ul>

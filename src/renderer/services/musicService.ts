@@ -549,7 +549,7 @@ class MusicService {
         const metadata = new MediaMetadata({
           title: this.currentTrack.title || 'Título desconocido',
           artist: this.currentTrack.artist || 'Artista desconocido',
-          album: 'Adrus Music Player',
+          album: 'Opentify',
           artwork: [
             {
               src: this.currentTrack.thumbnail || this.currentTrack.cover || '',

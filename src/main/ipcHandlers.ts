@@ -15,12 +15,12 @@ const getBinaryPath = () => {
 
 // Directorio para el cache de canciones
 const getSongsDirectory = () => {
-  return path.join(app.getPath("userData"), "adrus-music", "songs");
+  return path.join(app.getPath("userData"), "opentify", "songs");
 };
 
 // Directorio para las configuraciones
 const getSettingsDirectory = () => {
-  return path.join(app.getPath("userData"), "adrus-music");
+  return path.join(app.getPath("userData"), "opentify");
 };
 
 // Ruta del archivo de configuraciones
@@ -30,7 +30,7 @@ const getSettingsFilePath = () => {
 
 // Directorio para las playlists
 const getPlaylistsDirectory = () => {
-  return path.join(app.getPath("userData"), "adrus-music", "playlists");
+  return path.join(app.getPath("userData"), "opentify", "playlists");
 };
 
 const ytdlpPath = getBinaryPath();
@@ -408,29 +408,30 @@ class DownloadManager {
       // NUEVO: Timing para debug de velocidad
       const downloadStartTime = Date.now();
       
-      // Configuración optimizada de yt-dlp para máxima velocidad
+      // Configuración optimizada de yt-dlp para conversión a MP3
       const ffmpegBinaryPath = getFFmpegPath();
+      
+      console.log(`🎵 Descargando con calidad ${this.audioQuality} usando ffmpeg en: ${ffmpegBinaryPath || 'sistema'}`);
+      
       const ytdlpArgs = [
         url,
         "--extract-audio",
-        "--audio-format", compressionConfig.format,
-        // OPTIMIZADO: Usar solo audio-quality basado en configuración del usuario
+        "--audio-format", "mp3", // Forzar formato MP3 específicamente
         "--audio-quality", compressionConfig.ytdlpQuality,
         "--no-playlist",
         "--output", outputPath,
-        // OPTIMIZADO: Permitir logs para debug pero solo errores importantes
-        "--no-warnings",
-        // NUEVOS: Parámetros de optimización de velocidad
-        "--concurrent-fragments", "4", // Descargas paralelas de fragmentos
+        // Usar ffmpeg-static para conversión
+        ...(ffmpegBinaryPath ? ["--ffmpeg-location", ffmpegBinaryPath] : []),
+        // Parámetros específicos para MP3
+        "--postprocessor-args", `ffmpeg:-codec:a libmp3lame -b:a ${compressionConfig.bitrate} -ar 44100 -ac 2`,
+        // Configuraciones de velocidad
+        "--concurrent-fragments", "4",
         "--retries", "3",
         "--retry-sleep", "1",
-        // OPTIMIZADO: Solo usar ffmpeg si es necesario y de forma más eficiente
-        ...(ffmpegBinaryPath ? ["--ffmpeg-location", ffmpegBinaryPath] : []),
-        // REMOVIDO: postprocessor-args que causa conversión lenta innecesaria
-        // OPTIMIZADO: Metadatos mínimos para velocidad
+        // Metadatos mínimos
         "--embed-metadata",
         "--no-embed-thumbnail",
-        // NUEVO: Configuraciones adicionales de velocidad
+        // Configuraciones adicionales
         "--socket-timeout", "30",
         "--fragment-retries", "3"
       ];
@@ -441,16 +442,52 @@ class DownloadManager {
       // NUEVO: Calcular tiempo de descarga para debug
       const downloadTime = Date.now() - downloadStartTime;
 
-      // Verificar que el archivo se descargó correctamente
+      // Verificar que el archivo MP3 se descargó correctamente
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
         const fileSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2);
         const downloadSpeed = (parseFloat(fileSizeMB) / (downloadTime / 1000)).toFixed(2);
         if (!preload) {
-          console.log(`✅ DESCARGA COMPLETA (${fileSizeMB}MB en ${(downloadTime/1000).toFixed(1)}s = ${downloadSpeed}MB/s): ${path.basename(outputPath)}`);
+          console.log(`✅ DESCARGA COMPLETA MP3 (${fileSizeMB}MB en ${(downloadTime/1000).toFixed(1)}s = ${downloadSpeed}MB/s): ${path.basename(outputPath)}`);
         }
         return outputPath;
       } else {
-        throw new Error("El archivo no se descargó correctamente");
+        // Si no existe como MP3, buscar otros formatos y convertir
+        const baseOutputPath = outputPath.replace('.mp3', '');
+        const possibleExtensions = ['.m4a', '.webm', '.mp4', '.opus'];
+        let foundPath = null;
+        
+        for (const ext of possibleExtensions) {
+          const testPath = baseOutputPath + ext;
+          if (fs.existsSync(testPath) && fs.statSync(testPath).size > 0) {
+            foundPath = testPath;
+            break;
+          }
+        }
+        
+        if (foundPath) {
+          console.log(`🔄 Archivo descargado como ${path.extname(foundPath)}, convirtiendo a MP3...`);
+          await this.convertToMp3(foundPath, outputPath, compressionConfig.bitrate);
+          
+          // Eliminar archivo original después de conversión exitosa
+          try {
+            fs.unlinkSync(foundPath);
+            console.log(`🗑️ Archivo original eliminado: ${path.basename(foundPath)}`);
+          } catch (cleanupError) {
+            console.warn("No se pudo eliminar archivo original:", cleanupError);
+          }
+          
+          if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+            const fileSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2);
+            if (!preload) {
+              console.log(`✅ CONVERSIÓN A MP3 EXITOSA (${fileSizeMB}MB): ${path.basename(outputPath)}`);
+            }
+            return outputPath;
+          } else {
+            throw new Error("La conversión a MP3 falló");
+          }
+        } else {
+          throw new Error("No se encontró archivo descargado en ningún formato");
+        }
       }
 
     } catch (error) {
@@ -541,6 +578,61 @@ class DownloadManager {
     } catch (error) {
       console.error("Error during temp file cleanup:", error);
     }
+  }
+
+  // Función para convertir archivo a MP3 usando ffmpeg
+  private async convertToMp3(inputPath: string, outputPath: string, bitrate: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const ffmpegBinaryPath = getFFmpegPath();
+      if (!ffmpegBinaryPath) {
+        reject(new Error("FFmpeg no está disponible para conversión"));
+        return;
+      }
+
+      const { spawn } = require('child_process');
+      
+      const args = [
+        '-i', inputPath,
+        '-codec:a', 'libmp3lame',
+        '-b:a', bitrate,
+        '-ac', '2',
+        '-ar', '44100',
+        '-y', // Sobrescribir archivo de salida
+        outputPath
+      ];
+
+      console.log(`🔄 Convirtiendo ${path.basename(inputPath)} a MP3...`);
+      
+      const ffmpegProcess = spawn(ffmpegBinaryPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+
+      let errorOutput = '';
+
+      ffmpegProcess.stderr.on('data', (data: Buffer) => {
+        errorOutput += data.toString();
+      });
+
+      ffmpegProcess.on('close', (code: number | null) => {
+        if (code === 0) {
+          console.log(`✅ Conversión exitosa: ${path.basename(outputPath)}`);
+          resolve();
+        } else {
+          reject(new Error(`FFmpeg falló con código ${code}: ${errorOutput}`));
+        }
+      });
+
+      ffmpegProcess.on('error', (error: Error) => {
+        reject(error);
+      });
+
+      // Timeout de 2 minutos para conversión
+      setTimeout(() => {
+        ffmpegProcess.kill();
+        reject(new Error('Timeout en conversión MP3'));
+      }, 120000);
+    });
   }
 
   // Función para limpiar archivos huérfanos al iniciar

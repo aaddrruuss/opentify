@@ -32,7 +32,7 @@ function createTray() {
   // Crear el menú contextual del tray
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Music Player',
+      label: 'Opentify',
       enabled: false
     },
     {
@@ -70,7 +70,7 @@ function createTray() {
   ]);
   
   tray.setContextMenu(contextMenu);
-  tray.setToolTip('Music Player');
+  tray.setToolTip('Opentify');
   
   // Hacer clic en el tray para mostrar/ocultar la ventana
   tray.on('click', () => {
@@ -279,7 +279,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Configuraciones de rendimiento de la app
-  app.setAppUserModelId('com.adrus.musicplayer');
+  app.setAppUserModelId('com.adrus.opentify');
   
   createWindow();
   createTray(); // Crear el system tray

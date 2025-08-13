@@ -38,7 +38,7 @@ class BackgroundImportManager {
 
   constructor() {
     const { app } = require("electron");
-    this.persistenceFile = path.join(app.getPath("userData"), "adrus-music", "imports.json");
+    this.persistenceFile = path.join(app.getPath("userData"), "opentify", "imports.json");
     this.loadPersistedTasks();
   }
 

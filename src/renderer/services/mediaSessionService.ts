@@ -80,7 +80,7 @@ class MediaSessionService {
       const metadata = new MediaMetadata({
         title: track.title || 'Título desconocido',
         artist: track.artist || 'Artista desconocido',
-        album: 'Adrus Music Player',
+        album: 'Opentify',
         artwork: [
           {
             src: track.thumbnail || track.cover || '',

@@ -649,7 +649,7 @@ export function SettingsView({
                         Iniciar automáticamente al encender el ordenador
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Configura como se inicia Music Player con tu sistema
+                        Configura como se inicia Opentify con tu sistema
                       </p>
                     </div>
                   </div>
