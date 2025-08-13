@@ -165,6 +165,8 @@ La aplicación almacena sus configuraciones en:
 ### Roadmap
 - [ ] Crear playlist manualmente sin tener que importar
 - [ ] Agregar canciones desde la app a una playlist existente
+- [ ] Agregar traduccion a ingles
+- [ ] Configuracion para poder elegir en que directorio descargar la musica
 
 ## 🙏 Créditos y Agradecimientos
 
