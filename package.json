@@ -22,7 +22,11 @@
     "icon": "assets/images/icon.png",
     "files": [
       "dist/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "node_modules/ffmpeg-static/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**/*"
     ],
     "win": {
       "target": "nsis",

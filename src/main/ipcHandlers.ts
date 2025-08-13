@@ -39,18 +39,56 @@ const songsDir = getSongsDirectory();
 console.log("yt-dlp path:", ytdlpPath);
 console.log("Songs cache directory:", songsDir);
 
-// Función para obtener la ruta de FFmpeg usando ffmpeg-static
+// Verificar FFmpeg al inicio
+const initialFfmpegPath = getFFmpegPath();
+if (initialFfmpegPath) {
+  console.log("✅ FFmpeg disponible para conversión de audio");
+} else {
+  console.error("❌ FFmpeg no disponible - conversión de audio deshabilitada");
+}
+
+// Función para obtener la ruta de FFmpeg
 function getFFmpegPath(): string | null {
   try {
-    if (ffmpegPath) {
-      console.log("✅ FFmpeg-static disponible en:", ffmpegPath);
-      return ffmpegPath;
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    
+    if (isDev) {
+      // En desarrollo, usar ffmpeg-static directamente
+      if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+        return ffmpegPath;
+      }
+      
+      // Fallback en desarrollo
+      const devPaths = [
+        path.join(__dirname, "../../node_modules/ffmpeg-static/ffmpeg.exe"),
+        path.join(process.cwd(), "node_modules/ffmpeg-static/ffmpeg.exe")
+      ];
+      
+      for (const testPath of devPaths) {
+        if (fs.existsSync(testPath)) {
+          return testPath;
+        }
+      }
     } else {
-      console.error("❌ FFmpeg-static no está disponible");
-      return null;
+      // En producción, usar rutas específicas de la aplicación instalada
+      const executableDir = path.dirname(process.execPath);
+      const resourcesPath = process.resourcesPath;
+      
+      const prodPaths = [
+        path.join(executableDir, "resources", "app.asar.unpacked", "node_modules", "ffmpeg-static", "ffmpeg.exe"),
+        path.join(resourcesPath, "app.asar.unpacked", "node_modules", "ffmpeg-static", "ffmpeg.exe")
+      ];
+      
+      for (const testPath of prodPaths) {
+        if (fs.existsSync(testPath)) {
+          return testPath;
+        }
+      }
     }
+    
+    return null;
   } catch (error) {
-    console.error("Error obteniendo ruta de ffmpeg-static:", error);
+    console.error("Error localizando FFmpeg:", error);
     return null;
   }
 }
@@ -349,6 +387,12 @@ class DownloadManager {
         return cachedPath;
       }
 
+      // Verificación temprana de FFmpeg
+      const ffmpegAvailable = getFFmpegPath();
+      if (!ffmpegAvailable) {
+        throw new Error("FFmpeg no disponible para conversión de audio");
+      }
+
       // Rate limiting
       const now = Date.now();
       const timeSinceLastDownload = now - this.lastDownloadTime;
@@ -411,7 +455,14 @@ class DownloadManager {
       // Configuración optimizada de yt-dlp para conversión a MP3
       const ffmpegBinaryPath = getFFmpegPath();
       
-      console.log(`🎵 Descargando con calidad ${this.audioQuality} usando ffmpeg en: ${ffmpegBinaryPath || 'sistema'}`);
+      if (!ffmpegBinaryPath) {
+        console.error("❌ FFmpeg-static no disponible, abortando descarga");
+        throw new Error("FFmpeg es requerido para la conversión de audio");
+      }
+      
+      if (!preload) {
+        console.log(`🎵 Descargando: ${title || videoId}`);
+      }
       
       const ytdlpArgs = [
         url,
@@ -420,10 +471,10 @@ class DownloadManager {
         "--audio-quality", compressionConfig.ytdlpQuality,
         "--no-playlist",
         "--output", outputPath,
-        // Usar ffmpeg-static para conversión
-        ...(ffmpegBinaryPath ? ["--ffmpeg-location", ffmpegBinaryPath] : []),
-        // Parámetros específicos para MP3
-        "--postprocessor-args", `ffmpeg:-codec:a libmp3lame -b:a ${compressionConfig.bitrate} -ar 44100 -ac 2`,
+        // FORZAR el uso de ffmpeg-static para conversión
+        "--ffmpeg-location", ffmpegBinaryPath,
+        // Parámetros específicos para MP3 más robustos
+        "--postprocessor-args", `ffmpeg:-codec:a libmp3lame -b:a ${compressionConfig.bitrate} -ar 44100 -ac 2 -f mp3`,
         // Configuraciones de velocidad
         "--concurrent-fragments", "4",
         "--retries", "3",
@@ -433,61 +484,79 @@ class DownloadManager {
         "--no-embed-thumbnail",
         // Configuraciones adicionales
         "--socket-timeout", "30",
-        "--fragment-retries", "3"
+        "--fragment-retries", "3",
+        // NUEVO: Forzar recodificación aunque el formato ya sea MP3
+        "--recode-video", "mp3"
       ];
 
-      console.log(`⏱️ Iniciando yt-dlp para: ${title || videoId}`);
       await ytDlpWrapInstance!.execPromise(ytdlpArgs);
       
-      // NUEVO: Calcular tiempo de descarga para debug
       const downloadTime = Date.now() - downloadStartTime;
 
-      // Verificar que el archivo MP3 se descargó correctamente
-      if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-        const fileSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2);
-        const downloadSpeed = (parseFloat(fileSizeMB) / (downloadTime / 1000)).toFixed(2);
-        if (!preload) {
-          console.log(`✅ DESCARGA COMPLETA MP3 (${fileSizeMB}MB en ${(downloadTime/1000).toFixed(1)}s = ${downloadSpeed}MB/s): ${path.basename(outputPath)}`);
+      // PRIMERO: Verificar si el archivo MP3 se descargó correctamente
+      const checkForMp3 = () => {
+        if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+          return true;
         }
-        return outputPath;
-      } else {
-        // Si no existe como MP3, buscar otros formatos y convertir
+        return false;
+      };
+      
+      // SEGUNDO: Buscar archivos descargados en cualquier formato
+      const findDownloadedFile = () => {
         const baseOutputPath = outputPath.replace('.mp3', '');
-        const possibleExtensions = ['.m4a', '.webm', '.mp4', '.opus'];
-        let foundPath = null;
+        const possibleExtensions = ['.mp3', '.m4a', '.webm', '.mp4', '.opus', '.aac', '.ogg'];
         
         for (const ext of possibleExtensions) {
           const testPath = baseOutputPath + ext;
           if (fs.existsSync(testPath) && fs.statSync(testPath).size > 0) {
-            foundPath = testPath;
-            break;
+            return { path: testPath, format: ext };
           }
+        }
+        return null;
+      };
+      
+      // Verificar inmediatamente después de la descarga
+      if (checkForMp3()) {
+        if (!preload) {
+          console.log(`✅ Descargado como MP3: ${path.basename(outputPath)}`);
+        }
+        return outputPath;
+      }
+      
+      // Si no hay MP3, buscar otros formatos y convertir OBLIGATORIAMENTE
+      const foundFile = findDownloadedFile();
+      if (!foundFile) {
+        throw new Error("No se encontró ningún archivo descargado");
+      }
+      
+      if (!preload) {
+        console.log(`🔄 Convirtiendo ${foundFile.format} a MP3...`);
+      }
+      
+      // CONVERSIÓN FORZADA usando ffmpeg-static
+      try {
+        await this.convertToMp3(foundFile.path, outputPath, compressionConfig.bitrate);
+        
+        // Verificar conversión exitosa
+        if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+          throw new Error("La conversión a MP3 produjo un archivo vacío o falló");
         }
         
-        if (foundPath) {
-          console.log(`🔄 Archivo descargado como ${path.extname(foundPath)}, convirtiendo a MP3...`);
-          await this.convertToMp3(foundPath, outputPath, compressionConfig.bitrate);
-          
-          // Eliminar archivo original después de conversión exitosa
-          try {
-            fs.unlinkSync(foundPath);
-            console.log(`🗑️ Archivo original eliminado: ${path.basename(foundPath)}`);
-          } catch (cleanupError) {
-            console.warn("No se pudo eliminar archivo original:", cleanupError);
-          }
-          
-          if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
-            const fileSizeMB = (fs.statSync(outputPath).size / (1024 * 1024)).toFixed(2);
-            if (!preload) {
-              console.log(`✅ CONVERSIÓN A MP3 EXITOSA (${fileSizeMB}MB): ${path.basename(outputPath)}`);
-            }
-            return outputPath;
-          } else {
-            throw new Error("La conversión a MP3 falló");
-          }
-        } else {
-          throw new Error("No se encontró archivo descargado en ningún formato");
+        // Eliminar archivo original después de conversión exitosa
+        try {
+          fs.unlinkSync(foundFile.path);
+        } catch (cleanupError) {
+          // Ignorar errores de limpieza
         }
+        
+        if (!preload) {
+          console.log(`✅ Convertido a MP3: ${path.basename(outputPath)}`);
+        }
+        return outputPath;
+        
+      } catch (conversionError) {
+        console.error(`❌ Error en conversión de ${foundFile.format} a MP3:`, conversionError);
+        throw new Error(`Falló la conversión de ${foundFile.format} a MP3: ${conversionError}`);
       }
 
     } catch (error) {
@@ -580,28 +649,37 @@ class DownloadManager {
     }
   }
 
-  // Función para convertir archivo a MP3 usando ffmpeg
+  // Función MEJORADA para convertir archivo a MP3 usando ffmpeg-static
   private async convertToMp3(inputPath: string, outputPath: string, bitrate: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ffmpegBinaryPath = getFFmpegPath();
       if (!ffmpegBinaryPath) {
-        reject(new Error("FFmpeg no está disponible para conversión"));
+        reject(new Error("FFmpeg-static no está disponible para conversión"));
+        return;
+      }
+
+      // Verificar que el archivo de entrada existe
+      if (!fs.existsSync(inputPath)) {
+        reject(new Error(`Archivo de entrada no existe: ${inputPath}`));
         return;
       }
 
       const { spawn } = require('child_process');
       
+      // Argumentos mejorados para conversión más robusta
       const args = [
         '-i', inputPath,
-        '-codec:a', 'libmp3lame',
+        '-vn', // No video
+        '-codec:a', 'libmp3lame', // Usar libmp3lame específicamente
         '-b:a', bitrate,
-        '-ac', '2',
-        '-ar', '44100',
-        '-y', // Sobrescribir archivo de salida
+        '-ac', '2', // Estéreo
+        '-ar', '44100', // Sample rate estándar
+        '-f', 'mp3', // Forzar formato MP3
+        '-map_metadata', '0', // Copiar metadatos
+        '-y', // Sobrescribir archivo de salida sin preguntar
         outputPath
       ];
 
-      console.log(`🔄 Convirtiendo ${path.basename(inputPath)} a MP3...`);
       
       const ffmpegProcess = spawn(ffmpegBinaryPath, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -609,6 +687,11 @@ class DownloadManager {
       });
 
       let errorOutput = '';
+      let stdOutput = '';
+
+      ffmpegProcess.stdout.on('data', (data: Buffer) => {
+        stdOutput += data.toString();
+      });
 
       ffmpegProcess.stderr.on('data', (data: Buffer) => {
         errorOutput += data.toString();
@@ -616,22 +699,39 @@ class DownloadManager {
 
       ffmpegProcess.on('close', (code: number | null) => {
         if (code === 0) {
-          console.log(`✅ Conversión exitosa: ${path.basename(outputPath)}`);
-          resolve();
+          // Verificar que el archivo de salida se creó correctamente
+          if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+            resolve();
+          } else {
+            reject(new Error("Archivo convertido está vacío o no se creó"));
+          }
         } else {
-          reject(new Error(`FFmpeg falló con código ${code}: ${errorOutput}`));
+          reject(new Error(`FFmpeg falló con código ${code}`));
         }
       });
 
       ffmpegProcess.on('error', (error: Error) => {
-        reject(error);
+        console.error(`❌ FFMPEG error del proceso:`, error);
+        reject(new Error(`Error del proceso FFmpeg: ${error.message}`));
       });
 
-      // Timeout de 2 minutos para conversión
-      setTimeout(() => {
-        ffmpegProcess.kill();
-        reject(new Error('Timeout en conversión MP3'));
-      }, 120000);
+      // Timeout extendido para conversión (3 minutos)
+      const timeout = setTimeout(() => {
+        console.error(`⏰ FFMPEG timeout después de 3 minutos`);
+        ffmpegProcess.kill('SIGTERM');
+        
+        // Si no responde, forzar kill
+        setTimeout(() => {
+          ffmpegProcess.kill('SIGKILL');
+        }, 5000);
+        
+        reject(new Error('Timeout en conversión MP3 (3 minutos)'));
+      }, 180000); // 3 minutos
+      
+      // Limpiar timeout si termina antes
+      ffmpegProcess.on('close', () => {
+        clearTimeout(timeout);
+      });
     });
   }
 
