@@ -27,27 +27,27 @@ export function Sidebar({
   const menuItems = [
     {
       id: 'home',
-      label: 'Home',
+      label: 'Menú principal',
       icon: HomeIcon,
     },
     {
       id: 'search',
-      label: 'Search',
+      label: 'Buscar',
       icon: SearchIcon,
     },
     {
       id: 'library',
-      label: 'Your Library',
+      label: 'Tu Biblioteca',
       icon: LibraryIcon,
     },
     {
       id: 'playlists',
-      label: 'Create Playlist',
+      label: 'Crear Playlist',
       icon: PlusCircleIcon,
     },
     {
       id: 'liked',
-      label: 'Liked Songs',
+      label: 'Canciones Favoritas',
       icon: HeartIcon,
     },
   ]
@@ -124,17 +124,16 @@ export function Sidebar({
         </div>
       )}
 
-      {/* Settings Button */}
+      {/* Settings and Donation Buttons */}
       <div className="p-6 border-t border-gray-200 dark:border-gray-700 space-y-3">
         <button 
           onClick={() => setCurrentView('settings')}
-          className={`flex items-center w-full text-sm transition-colors ${currentView === 'settings' ? 'text-[#2196F3] font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-[#2196F3] dark:hover:text-[#2196F3]'}`}
+          className={`flex items-center w-full text-sm transition-colors justify-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 shadow-md`}
         >
-          <SettingsIcon className="w-4 h-4 mr-2" />
-          Settings
+          <SettingsIcon className="w-5 h-5 text-[#2196F3]" />
+          <span className="font-medium">Configuración</span>
         </button>
-        
-        {/* Donation Button */}
+
         <button
           onClick={async () => {
             try {
@@ -148,10 +147,10 @@ export function Sidebar({
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 rounded-md hover:from-yellow-500 hover:to-yellow-600 transition-all duration-200 font-medium text-sm shadow-md hover:shadow-lg transform hover:scale-105"
         >
           <Heart className="h-4 w-4" />
-          Donate
+          Apoyar a Opentify
         </button>
       </div>
-      
+
       {showImportManager && (
         <ImportManagerPopup 
           isOpen={showImportManager}

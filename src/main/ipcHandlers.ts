@@ -1563,7 +1563,7 @@ export function setupIpcHandlers() {
       let videos;
       try {
         const searchPromise = YouTube.search(query, {
-          limit: 12, // Reducir límite para menos memoria
+          limit: 100, // Buscar 100 canciones desde YouTube
           type: "video",
         });
         
@@ -1583,22 +1583,31 @@ export function setupIpcHandlers() {
         return [];
       }
 
-      // Filtrado más eficiente
-      const filteredVideos = videos
-        .filter((video) => {
-          const duration = video.duration;
-          return duration && duration > 0 && Math.floor(duration / 1000) <= 900;
-        })
-        .slice(0, 10); // Límite más bajo
+      // Almacenar todos los resultados sin filtrar por duración
+      const allVideos = Array.isArray(videos) ? videos : [];
+      console.log(`📊 Videos obtenidos de YouTube: ${allVideos.length}`);
 
-      const results = filteredVideos.map((video) => ({
-        id: video.id!,
-        title: video.title || "Sin título",
-        artist: video.channel?.name || "Unknown Artist",
-        duration: video.durationFormatted || "0:00",
-        thumbnail: `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`,
-        cover: `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`
-      })).filter(Boolean);
+      // Procesar todos los resultados hasta 100
+      const filteredVideos = allVideos.slice(0, 100); // Tomar hasta 100 resultados
+      
+      console.log(`🔍 Videos procesados: ${filteredVideos.length}`);
+
+      const results = filteredVideos.map((video) => {
+        // Agregar validación adicional para asegurar que todos los campos están presentes
+        if (!video.id || !video.title) {
+          console.warn(`Video inválido filtrado: ${video.id || 'sin ID'}`);
+          return null;
+        }
+        
+        return {
+          id: video.id,
+          title: video.title || "Sin título",
+          artist: video.channel?.name || "Unknown Artist",
+          duration: video.durationFormatted || "0:00",
+          thumbnail: `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`,
+          cover: `https://img.youtube.com/vi/${video.id}/hqdefault.jpg`
+        };
+      }).filter(Boolean);
 
       // Guardar en cache con score inicial
       if (results.length > 0) {

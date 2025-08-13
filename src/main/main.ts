@@ -160,6 +160,9 @@ function createWindow() {
     show: false, // No mostrar hasta que esté listo
   });
 
+  // Eliminanmos la barra de File, Edit y demas para? no se usa...
+  mainWindow.setMenu(null);
+
   // Configurar CSP optimizada
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
