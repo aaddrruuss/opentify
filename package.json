@@ -1,6 +1,6 @@
 {
   "name": "opentify",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A free and open source alternative to other music players or streaming services.",
   "icon": "assets/images/icon.png",
   "main": "dist/main/main.js",
