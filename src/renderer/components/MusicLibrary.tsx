@@ -3,7 +3,7 @@ import { TrackList } from "./TrackList";
 import { ImportPlaylist } from "./ImportPlaylist";
 import { PlaylistCard } from "./PlaylistCard";
 import { Track, QueueItem } from "../types/index";
-import { SearchIcon, Upload, Music } from "lucide-react";
+import { SearchIcon, Upload, Music, Plus } from "lucide-react";
 import { SettingsView } from './SettingsView';
 
 interface MusicLibraryProps {
@@ -62,6 +62,8 @@ export const MusicLibrary = memo(({
     failed: number;
   } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
   const [importedPlaylists, setImportedPlaylists] = useState<{[key: string]: Track[]}>({});
   const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
   const [expandedPlaylists, setExpandedPlaylists] = useState<string[]>([]);
@@ -367,6 +369,38 @@ export const MusicLibrary = memo(({
     }
   }, []);
 
+  const handleCreatePlaylist = useCallback(async () => {
+    if (!newPlaylistName.trim()) return;
+
+    try {
+      // Crear playlist vacía
+      const success = await window.playlistAPI.savePlaylist(newPlaylistName.trim(), []);
+      
+      if (success) {
+        // Actualizar el estado local
+        setImportedPlaylists(prev => ({
+          ...prev,
+          [newPlaylistName.trim()]: []
+        }));
+        
+        console.log(`✅ Playlist "${newPlaylistName.trim()}" creada correctamente`);
+        
+        // Limpiar y cerrar modal
+        setNewPlaylistName('');
+        setShowCreatePlaylistModal(false);
+      } else {
+        console.error(`❌ Error creando la playlist "${newPlaylistName.trim()}"`);
+      }
+    } catch (error) {
+      console.error('Error creando playlist:', error);
+    }
+  }, [newPlaylistName]);
+
+  const handleCancelCreatePlaylist = useCallback(() => {
+    setNewPlaylistName('');
+    setShowCreatePlaylistModal(false);
+  }, []);
+
   // MEJORADO: Escuchar cambios en playlists y recargar automáticamente
   useEffect(() => {
     const handlePlaylistChanges = () => {
@@ -418,6 +452,14 @@ export const MusicLibrary = memo(({
                 <Upload className="h-4 w-4" />
                 Importar de Spotify
               </button>
+              
+              <button
+                onClick={() => setShowCreatePlaylistModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Crear Playlist
+              </button>
             </div>
           </div>
         </div>
@@ -464,14 +506,22 @@ export const MusicLibrary = memo(({
               No tienes playlists aún
             </p>
             <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-              Importa una playlist de Spotify para comenzar
+              Importa una playlist de Spotify o crea una nueva para comenzar
             </p>
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="px-6 py-3 bg-[#1DB954] text-white rounded-lg hover:bg-green-600 transition-colors"
-            >
-              Importar Primera Playlist
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="px-6 py-3 bg-[#1DB954] text-white rounded-lg hover:bg-green-600 transition-colors"
+              >
+                Importar de Spotify
+              </button>
+              <button
+                onClick={() => setShowCreatePlaylistModal(true)}
+                className="px-6 py-3 bg-[#2196F3] text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Crear Nueva Playlist
+              </button>
+            </div>
           </div>
         )}
       </section>
@@ -699,6 +749,56 @@ export const MusicLibrary = memo(({
           onCancel={() => setShowImportModal(false)}
           onSearch={searchForImport}
         />
+      )}
+
+      {/* Modal para crear playlist */}
+      {showCreatePlaylistModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+              Crear Nueva Playlist
+            </h2>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Nombre de la playlist
+              </label>
+              <input
+                type="text"
+                value={newPlaylistName}
+                onChange={(e) => setNewPlaylistName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreatePlaylist();
+                  } else if (e.key === 'Escape') {
+                    handleCancelCreatePlaylist();
+                  }
+                }}
+                placeholder="Ej: Mi Playlist Favorita"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                autoFocus
+                maxLength={50}
+              />
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelCreatePlaylist}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreatePlaylist}
+                disabled={!newPlaylistName.trim()}
+                className="px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Crear Playlist
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
