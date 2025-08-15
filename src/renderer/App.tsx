@@ -243,7 +243,7 @@ export function App() {
   }, [currentTime, throttledDiscordPositionUpdate]);
 
   // Track selection optimizada
-  const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number, isFromQueue: boolean = false) => {
+  const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number, isFromQueue: boolean = false, playlistNameOverride?: string) => {
     const now = Date.now();
     
     if (now - lastActionTime < 300) {
@@ -275,7 +275,9 @@ export function App() {
           setPlaylist([...fromPlaylist]);
           setCurrentTrackIndex(safeIndex >= 0 ? safeIndex : 0);
           
-          if (fromPlaylist === searchResults) {
+          if (playlistNameOverride) {
+            setPlaylistName(playlistNameOverride);
+          } else if (fromPlaylist === searchResults) {
             setPlaylistName("Resultados de búsqueda");
           } else {
             const playlistEntry = Object.entries(importedPlaylists).find(([name, tracks]) => {
@@ -456,7 +458,7 @@ export function App() {
       const nextTrack = savedContext.playlist[nextIndex];
       if (nextTrack) {
         console.log(`🎵 Continuando con playlist restaurada: ${nextTrack.title} (${nextIndex + 1}/${savedContext.playlist.length})`);
-        handleTrackSelect(nextTrack, savedContext.playlist, nextIndex);
+        handleTrackSelect(nextTrack, savedContext.playlist, nextIndex, false, savedContext.playlistName);
         return;
       }
     }
@@ -713,7 +715,7 @@ export function App() {
       const nextTrack = savedContext.playlist[nextIndex];
       if (nextTrack) {
         console.log(`⏭️ Saltando en playlist restaurada: ${nextTrack.title} (${nextIndex + 1}/${savedContext.playlist.length})`);
-        handleTrackSelect(nextTrack, savedContext.playlist, nextIndex);
+        handleTrackSelect(nextTrack, savedContext.playlist, nextIndex, false, savedContext.playlistName);
         return;
       }
     }

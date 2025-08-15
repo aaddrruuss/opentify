@@ -7,7 +7,7 @@ import { SearchIcon, Upload, Music } from "lucide-react";
 import { SettingsView } from './SettingsView';
 
 interface MusicLibraryProps {
-  onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
+  onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number, isFromQueue?: boolean, playlistNameOverride?: string) => void;
   currentView: string;
   searchResults: Track[];
   onSearch: (query: string) => void;
@@ -344,6 +344,29 @@ export const MusicLibrary = memo(({
     }
   }, [onAddToQueue]);
 
+  const handleDeletePlaylist = useCallback(async (playlistName: string) => {
+    try {
+      const success = await window.playlistAPI.deletePlaylist(playlistName);
+      if (success) {
+        // Actualizar el estado local removiendo la playlist
+        setImportedPlaylists(prev => {
+          const updated = { ...prev };
+          delete updated[playlistName];
+          return updated;
+        });
+
+        // Remover de playlists expandidas si está allí
+        setExpandedPlaylists(prev => prev.filter(name => name !== playlistName));
+        
+        console.log(`🗑️ Playlist "${playlistName}" eliminada correctamente`);
+      } else {
+        console.error(`❌ Error eliminando la playlist "${playlistName}"`);
+      }
+    } catch (error) {
+      console.error('Error eliminando playlist:', error);
+    }
+  }, []);
+
   // MEJORADO: Escuchar cambios en playlists y recargar automáticamente
   useEffect(() => {
     const handlePlaylistChanges = () => {
@@ -411,15 +434,16 @@ export const MusicLibrary = memo(({
                 onNameChange={handlePlaylistNameChange}
                 onPlay={() => {
                   if (tracks.length > 0) {
-                    onTrackSelect(tracks[0], tracks, 0);
+                    onTrackSelect(tracks[0], tracks, 0, false, name);
                   }
                 }}
                 onTrackSelect={(track, trackIndex) => {
-                  onTrackSelect(track, tracks, trackIndex);
+                  onTrackSelect(track, tracks, trackIndex, false, name);
                 }}
                 onAddToPlaylist={handleAddToPlaylist}
                 onRemoveFromPlaylist={handleRemoveFromPlaylist}
                 onAddToQueue={handleAddToQueueAction}
+                onDeletePlaylist={handleDeletePlaylist}
               />
             ))}
           </div>

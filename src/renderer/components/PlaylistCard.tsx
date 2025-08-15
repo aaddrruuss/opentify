@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Music, Edit2, Check, X, Play, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react';
 import { Track, PlaylistSettings } from '../types/index';
 import { ContextMenu } from './ContextMenu';
+import { PlaylistContextMenu } from './PlaylistContextMenu';
 
 interface PlaylistCardProps {
   name: string;
@@ -10,10 +11,11 @@ interface PlaylistCardProps {
   onToggleExpand: () => void;
   onNameChange: (oldName: string, newName: string) => void;
   onPlay: () => void;
-  onTrackSelect: (track: Track, trackIndex: number) => void;
+  onTrackSelect: (track: Track, trackIndex: number, isFromQueue?: boolean, playlistNameOverride?: string) => void;
   onAddToPlaylist?: (track: Track, playlistName: string) => void;
   onRemoveFromPlaylist?: (track: Track, playlistName: string) => void;
   onAddToQueue?: (track: Track) => void;
+  onDeletePlaylist?: (playlistName: string) => void;
 }
 
 type SortType = 'default' | 'name' | 'artist' | 'duration';
@@ -29,7 +31,8 @@ export function PlaylistCard({
   onTrackSelect,
   onAddToPlaylist,
   onRemoveFromPlaylist,
-  onAddToQueue
+  onAddToQueue,
+  onDeletePlaylist
 }: PlaylistCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
@@ -47,7 +50,7 @@ export function PlaylistCard({
   // Estados para búsqueda
   const [searchQuery, setSearchQuery] = useState<string>('');
   
-  // Estados para menú contextual
+  // Estados para menú contextual de canciones
   const [contextMenu, setContextMenu] = useState<{
     isVisible: boolean;
     x: number;
@@ -58,6 +61,17 @@ export function PlaylistCard({
     x: 0,
     y: 0,
     track: null
+  });
+
+  // Estados para menú contextual de playlist
+  const [playlistContextMenu, setPlaylistContextMenu] = useState<{
+    isVisible: boolean;
+    x: number;
+    y: number;
+  }>({
+    isVisible: false,
+    x: 0,
+    y: 0
   });
 
   // Cargar configuraciones de la playlist
@@ -291,6 +305,25 @@ export function PlaylistCard({
     onAddToQueue?.(track);
   }, [onAddToQueue]);
 
+  // Funciones para el menú contextual de playlist
+  const handlePlaylistContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPlaylistContextMenu({
+      isVisible: true,
+      x: e.clientX,
+      y: e.clientY
+    });
+  }, []);
+
+  const handleClosePlaylistContextMenu = useCallback(() => {
+    setPlaylistContextMenu(prev => ({ ...prev, isVisible: false }));
+  }, []);
+
+  const handleDeletePlaylistAction = useCallback((playlistName: string) => {
+    onDeletePlaylist?.(playlistName);
+  }, [onDeletePlaylist]);
+
   const renderPlaylistImage = () => {
     if (isLoadingImage) {
       return (
@@ -400,6 +433,7 @@ export function PlaylistCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onToggleExpand()} // Click en cualquier parte abre la playlist
+      onContextMenu={handlePlaylistContextMenu} // Click derecho muestra menú contextual
     >
       {/* Tarjeta estilo Spotify */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg transition-all duration-300 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm hover:shadow-lg">
@@ -685,7 +719,7 @@ export function PlaylistCard({
                       <button
                         key={track.id}
                         onClick={() => {
-                          onTrackSelect(track, originalIndex);
+                          onTrackSelect(track, originalIndex, false, name);
                           // NO cerrar el modal
                         }}
                         onContextMenu={(e) => handleContextMenu(e, track)}
@@ -778,7 +812,7 @@ export function PlaylistCard({
         </div>
       )}
 
-      {/* Menú contextual */}
+      {/* Menú contextual para canciones */}
       {contextMenu.track && (
         <ContextMenu
           x={contextMenu.x}
@@ -793,6 +827,16 @@ export function PlaylistCard({
           currentPlaylistName={name}
         />
       )}
+
+      {/* Menú contextual para playlist */}
+      <PlaylistContextMenu
+        x={playlistContextMenu.x}
+        y={playlistContextMenu.y}
+        playlistName={name}
+        isVisible={playlistContextMenu.isVisible}
+        onClose={handleClosePlaylistContextMenu}
+        onDeletePlaylist={handleDeletePlaylistAction}
+      />
     </div>
   );
 }
