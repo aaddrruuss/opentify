@@ -499,12 +499,12 @@ export function App() {
     const nextTrack = playlist[nextIndex];
     if (nextTrack) {
       console.log(`🎵 Reproduciendo siguiente: ${nextTrack.title}`);
-      handleTrackSelect(nextTrack, playlist, nextIndex);
+      handleTrackSelect(nextTrack, playlist, nextIndex, false, playlistName);
     } else {
       console.log("❌ No se encontró la siguiente canción, pausando");
       setIsPlaying(false);
     }
-  }, [repeatMode, currentTrack, playlist, currentTrackIndex, isShuffle, handleTrackSelect, queue, getNextFromQueue, isPlayingFromQueue, originalPlaylistContext]);
+  }, [repeatMode, currentTrack, playlist, currentTrackIndex, isShuffle, handleTrackSelect, queue, getNextFromQueue, isPlayingFromQueue, originalPlaylistContext, playlistName]);
 
   // Music service setup (optimizado)
   useEffect(() => {
@@ -748,9 +748,9 @@ export function App() {
     const nextTrack = playlist[nextIndex];
     if (nextTrack) {
       console.log(`⏭️ Saltando en playlist normal: ${nextTrack.title}`);
-      handleTrackSelect(nextTrack, playlist, nextIndex);
+      handleTrackSelect(nextTrack, playlist, nextIndex, false, playlistName);
     }
-  }, [lastActionTime, playlist, pendingTrackId, isShuffle, currentTrackIndex, repeatMode, handleTrackSelect, queue, getNextFromQueue, isPlayingFromQueue, originalPlaylistContext]);
+  }, [lastActionTime, playlist, pendingTrackId, isShuffle, currentTrackIndex, repeatMode, handleTrackSelect, queue, getNextFromQueue, isPlayingFromQueue, originalPlaylistContext, playlistName]);
 
   const handleSkipBack = useCallback(() => {
     const now = Date.now();
@@ -781,9 +781,9 @@ export function App() {
     
     const prevTrack = playlist[prevIndex];
     if (prevTrack) {
-      handleTrackSelect(prevTrack, playlist, prevIndex);
+      handleTrackSelect(prevTrack, playlist, prevIndex, false, playlistName);
     }
-  }, [lastActionTime, pendingTrackId, currentTime, playlist, isShuffle, currentTrackIndex, handleSeek, handleTrackSelect]);
+  }, [lastActionTime, pendingTrackId, currentTime, playlist, isShuffle, currentTrackIndex, handleSeek, handleTrackSelect, playlistName]);
 
   // NUEVO: Handler para toggle dark mode desde settings
   const toggleDarkMode = useCallback((darkMode: boolean) => {
