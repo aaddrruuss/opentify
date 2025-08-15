@@ -33,6 +33,12 @@ export interface Settings {
   lastPlayedTrack?: Track | null;
   lastPlayedPosition?: number;
   lastPlayedTime?: number; // timestamp when app was closed
+  // NUEVO: Persistencia del contexto de playlist
+  lastPlaylistContext?: {
+    playlist: Track[];
+    currentIndex: number;
+    playlistName: string;
+  } | null;
 }
 
 export interface PlaylistSettings {

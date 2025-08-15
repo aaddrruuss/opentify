@@ -62,7 +62,7 @@ export function NowPlaying({ track, isPlaying, isDownloading = false, playlistIn
           <span>•</span>
           <span>{track.duration}</span>
           
-          {playlistInfo && playlistInfo.total > 1 && (
+          {playlistInfo && (playlistInfo.total > 1 || (playlistInfo.name && playlistInfo.name !== "Canción individual" && playlistInfo.name !== "Resultados de búsqueda")) && (
             <>
               <span>•</span>
               <span className="truncate">

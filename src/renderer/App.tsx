@@ -148,6 +148,36 @@ export function App() {
             setCurrentTrack(settings.lastPlayedTrack);
             setSavedPosition(settings.lastPlayedPosition);
             setIsRestoringTrack(true);
+            
+            // NUEVO: Restaurar contexto de playlist si existe
+            if (settings.lastPlaylistContext) {
+              console.log(`🔄 Restaurando contexto de playlist: "${settings.lastPlaylistContext.playlistName}", canción ${settings.lastPlaylistContext.currentIndex + 1}/${settings.lastPlaylistContext.playlist.length}`);
+              setPlaylist(settings.lastPlaylistContext.playlist);
+              setCurrentTrackIndex(settings.lastPlaylistContext.currentIndex);
+              setPlaylistName(settings.lastPlaylistContext.playlistName);
+              
+              // Si es una playlist de usuario, intentar actualizarla desde el almacenamiento
+              setTimeout(async () => {
+                try {
+                  if (settings.lastPlaylistContext && settings.lastPlaylistContext.playlistName !== "Resultados de búsqueda" && settings.lastPlaylistContext.playlistName !== "Canción individual") {
+                    const playlistNames = await window.playlistAPI.getPlaylists();
+                    if (playlistNames.includes(settings.lastPlaylistContext.playlistName)) {
+                      const updatedPlaylist = await window.playlistAPI.loadPlaylist(settings.lastPlaylistContext.playlistName);
+                      console.log(`🔄 Actualizando playlist restaurada "${settings.lastPlaylistContext.playlistName}" con ${updatedPlaylist.length} canciones`);
+                      setPlaylist(updatedPlaylist);
+                      
+                      // Encontrar el índice actual de la canción en la playlist actualizada
+                      const currentTrackInUpdatedPlaylist = updatedPlaylist.findIndex(t => t.id === settings.lastPlayedTrack?.id);
+                      if (currentTrackInUpdatedPlaylist >= 0) {
+                        setCurrentTrackIndex(currentTrackInUpdatedPlaylist);
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.error("Error actualizando playlist restaurada:", error);
+                }
+              }, 1000);
+            }
           }
         }
         
@@ -192,7 +222,13 @@ export function App() {
           isDarkMode,
           lastPlayedTrack: currentTrack,
           lastPlayedPosition: currentTime,
-          lastPlayedTime: Date.now()
+          lastPlayedTime: Date.now(),
+          // NUEVO: Guardar contexto de playlist actual si existe
+          lastPlaylistContext: currentTrack && playlist.length > 0 && playlistName ? {
+            playlist: [...playlist],
+            currentIndex: currentTrackIndex,
+            playlistName: playlistName
+          } : null
         };
 
         await window.settingsAPI.saveSettings(updatedSettings);
@@ -204,7 +240,7 @@ export function App() {
     // Crear throttled version de la función async
     const throttledAsyncSave = throttle(saveSettingsAsync, 2000);
     throttledAsyncSave();
-  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded]);
+  }, [volume, isMuted, repeatMode, isShuffle, isDarkMode, currentTrack, currentTime, settingsLoaded, playlist, currentTrackIndex, playlistName]);
 
   // Aplicar modo oscuro (optimizado)
   useEffect(() => {
@@ -466,10 +502,20 @@ export function App() {
     // CASO 3: Playlist normal (no hay cola y no estamos reproducing desde cola)
     setIsPlayingFromQueue(false);
     
+    // Si no hay playlist actual pero tenemos una sola canción, no pausar inmediatamente
+    // sino verificar si hay contexto de playlist guardado
     if (playlist.length <= 1) {
-      console.log("📭 No hay más canciones en la playlist, pausando");
-      setIsPlaying(false);
-      return;
+      console.log("📭 Playlist actual pequeña o vacía, verificando contexto persistente...");
+      
+      // Si estamos restaurando y hay contexto, mantener reproducción
+      if (playlistName && playlistName !== "Canción individual") {
+        console.log(`🔄 Manteniendo reproducción en contexto: "${playlistName}"`);
+        // No pausar aquí, continuar con la lógica normal
+      } else {
+        console.log("📭 No hay más canciones en la playlist, pausando");
+        setIsPlaying(false);
+        return;
+      }
     }
     
     let nextIndex;
