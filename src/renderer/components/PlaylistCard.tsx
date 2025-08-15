@@ -16,6 +16,7 @@ interface PlaylistCardProps {
   onRemoveFromPlaylist?: (track: Track, playlistName: string) => void;
   onAddToQueue?: (track: Track) => void;
   onDeletePlaylist?: (playlistName: string) => void;
+  isShuffle?: boolean;
 }
 
 type SortType = 'default' | 'name' | 'artist' | 'duration';
@@ -32,7 +33,8 @@ export function PlaylistCard({
   onAddToPlaylist,
   onRemoveFromPlaylist,
   onAddToQueue,
-  onDeletePlaylist
+  onDeletePlaylist,
+  isShuffle
 }: PlaylistCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
@@ -566,7 +568,14 @@ export function PlaylistCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onPlay();
+                      // Si shuffle está activado, reproducir canción aleatoria
+                      if (isShuffle && tracks.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * tracks.length);
+                        console.log(`🔀 Shuffle activado en modal: comenzando desde canción ${randomIndex + 1}/${tracks.length}`);
+                        onTrackSelect(tracks[randomIndex], randomIndex, false, name);
+                      } else {
+                        onPlay();
+                      }
                     }}
                     className="ml-4 px-6 py-2 bg-[#2196F3] text-white rounded-full hover:bg-blue-600 transition-colors flex items-center gap-2 hover:shadow-lg transform hover:scale-105"
                   >

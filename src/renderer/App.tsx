@@ -905,6 +905,7 @@ export function App() {
             queue={queue}
             onAddToQueue={handleAddToQueue}
             onPlayFromQueue={handlePlayFromQueue}
+            isShuffle={isShuffle}
             isDarkMode={isDarkMode}
             onToggleDarkMode={toggleDarkMode}
             // NUEVO: Props para compresión

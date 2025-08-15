@@ -16,6 +16,7 @@ interface MusicLibraryProps {
   queue?: QueueItem[];
   onAddToQueue?: (track: Track) => void;
   onPlayFromQueue?: (queueItem: QueueItem) => void;
+  isShuffle?: boolean;
 }
 
 export const MusicLibrary = memo(({
@@ -28,6 +29,7 @@ export const MusicLibrary = memo(({
   queue,
   onAddToQueue,
   onPlayFromQueue,
+  isShuffle,
   isDarkMode,
   onToggleDarkMode,
   // NUEVO: Props para compresión
@@ -476,7 +478,13 @@ export const MusicLibrary = memo(({
                 onNameChange={handlePlaylistNameChange}
                 onPlay={() => {
                   if (tracks.length > 0) {
-                    onTrackSelect(tracks[0], tracks, 0, false, name);
+                    let startIndex = 0;
+                    if (isShuffle) {
+                      // Si shuffle está activado, elegir una canción aleatoria
+                      startIndex = Math.floor(Math.random() * tracks.length);
+                      console.log(`🔀 Shuffle activado: comenzando playlist "${name}" desde canción ${startIndex + 1}/${tracks.length}`);
+                    }
+                    onTrackSelect(tracks[startIndex], tracks, startIndex, false, name);
                   }
                 }}
                 onTrackSelect={(track, trackIndex) => {
@@ -486,6 +494,7 @@ export const MusicLibrary = memo(({
                 onRemoveFromPlaylist={handleRemoveFromPlaylist}
                 onAddToQueue={handleAddToQueueAction}
                 onDeletePlaylist={handleDeletePlaylist}
+                isShuffle={isShuffle}
               />
             ))}
           </div>
