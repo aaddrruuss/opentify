@@ -8,6 +8,12 @@ export interface Track {
   thumbnail?: string;
 }
 
+export interface QueueItem {
+  track: Track;
+  addedAt: number;
+  id: string;
+}
+
 export interface MusicAPI {
   searchMusic: (query: string) => Promise<Track[]>;
   getSongPath: (videoId: string, title?: string, preload?: boolean) => Promise<string | null>;

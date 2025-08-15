@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Music, Edit2, Check, X, Play, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react';
 import { Track, PlaylistSettings } from '../types/index';
+import { ContextMenu } from './ContextMenu';
 
 interface PlaylistCardProps {
   name: string;
@@ -10,6 +11,9 @@ interface PlaylistCardProps {
   onNameChange: (oldName: string, newName: string) => void;
   onPlay: () => void;
   onTrackSelect: (track: Track, trackIndex: number) => void;
+  onAddToPlaylist?: (track: Track, playlistName: string) => void;
+  onRemoveFromPlaylist?: (track: Track, playlistName: string) => void;
+  onAddToQueue?: (track: Track) => void;
 }
 
 type SortType = 'default' | 'name' | 'artist' | 'duration';
@@ -22,7 +26,10 @@ export function PlaylistCard({
   onToggleExpand, 
   onNameChange, 
   onPlay, 
-  onTrackSelect 
+  onTrackSelect,
+  onAddToPlaylist,
+  onRemoveFromPlaylist,
+  onAddToQueue
 }: PlaylistCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
@@ -39,6 +46,19 @@ export function PlaylistCard({
   
   // Estados para búsqueda
   const [searchQuery, setSearchQuery] = useState<string>('');
+  
+  // Estados para menú contextual
+  const [contextMenu, setContextMenu] = useState<{
+    isVisible: boolean;
+    x: number;
+    y: number;
+    track: Track | null;
+  }>({
+    isVisible: false,
+    x: 0,
+    y: 0,
+    track: null
+  });
 
   // Cargar configuraciones de la playlist
   useEffect(() => {
@@ -242,6 +262,34 @@ export function PlaylistCard({
       sortOrder: newSortOrder
     });
   }, [sortType, sortOrder, savePlaylistSettings]);
+
+  // Funciones para el menú contextual
+  const handleContextMenu = useCallback((e: React.MouseEvent, track: Track) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      isVisible: true,
+      x: e.clientX,
+      y: e.clientY,
+      track
+    });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(prev => ({ ...prev, isVisible: false, track: null }));
+  }, []);
+
+  const handleAddToPlaylistAction = useCallback((track: Track, playlistName: string) => {
+    onAddToPlaylist?.(track, playlistName);
+  }, [onAddToPlaylist]);
+
+  const handleRemoveFromPlaylistAction = useCallback((track: Track) => {
+    onRemoveFromPlaylist?.(track, name);
+  }, [onRemoveFromPlaylist, name]);
+
+  const handleAddToQueueAction = useCallback((track: Track) => {
+    onAddToQueue?.(track);
+  }, [onAddToQueue]);
 
   const renderPlaylistImage = () => {
     if (isLoadingImage) {
@@ -640,6 +688,7 @@ export function PlaylistCard({
                           onTrackSelect(track, originalIndex);
                           // NO cerrar el modal
                         }}
+                        onContextMenu={(e) => handleContextMenu(e, track)}
                         className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
                       >
                         <div className="flex items-center gap-4">
@@ -727,6 +776,22 @@ export function PlaylistCard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Menú contextual */}
+      {contextMenu.track && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          track={contextMenu.track}
+          isVisible={contextMenu.isVisible}
+          onClose={handleCloseContextMenu}
+          onAddToPlaylist={handleAddToPlaylistAction}
+          onRemoveFromPlaylist={handleRemoveFromPlaylistAction}
+          onAddToQueue={handleAddToQueueAction}
+          isInPlaylist={true}
+          currentPlaylistName={name}
+        />
       )}
     </div>
   );

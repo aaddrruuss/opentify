@@ -5,7 +5,7 @@ import { MusicLibrary } from './components/MusicLibrary';
 import { PlayerControls } from './components/PlayerControls';
 import { musicService } from './services/musicService';
 import { discordRPCClient } from './services/discordRPCService';
-import { Track, Settings } from './types/index';
+import { Track, Settings, QueueItem } from './types/index';
 
 // Throttle function para optimizar actualizaciones
 const throttle = (func: Function, limit: number) => {
@@ -57,6 +57,15 @@ export function App() {
   const [lastActionTime, setLastActionTime] = useState(0);
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
   const [importedPlaylists, setImportedPlaylists] = useState<Record<string, Track[]>>({});
+  
+  // Estados para la cola de reproducción
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [isPlayingFromQueue, setIsPlayingFromQueue] = useState(false);
+  const [originalPlaylistContext, setOriginalPlaylistContext] = useState<{
+    playlist: Track[];
+    currentIndex: number;
+    playlistName: string;
+  } | null>(null);
   
   // NUEVO: Estados globales para compresión
   const [isCompressing, setIsCompressing] = useState(false);
@@ -148,7 +157,7 @@ export function App() {
         if (settings.discordRPCEnabled !== false) {
           setTimeout(() => {
             discordRPCClient.initialize().catch(error => {
-              console.error('Failed to initialize Discord RPC:', error);
+              console.warn('Discord RPC initialization failed (this is normal if Discord is not running):', error);
             });
           }, 1000);
         }
@@ -234,7 +243,7 @@ export function App() {
   }, [currentTime, throttledDiscordPositionUpdate]);
 
   // Track selection optimizada
-  const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number) => {
+  const handleTrackSelect = useCallback(async (track: Track, fromPlaylist?: Track[], trackIndex?: number, isFromQueue: boolean = false) => {
     const now = Date.now();
     
     if (now - lastActionTime < 300) {
@@ -258,25 +267,30 @@ export function App() {
       setCurrentTime(0);
       setDuration(0);
       
-      if (fromPlaylist && Array.isArray(fromPlaylist) && fromPlaylist.length > 0) {
-        const safeIndex = trackIndex !== undefined ? trackIndex : fromPlaylist.findIndex(t => t.id === track.id);
-        
-        setPlaylist([...fromPlaylist]);
-        setCurrentTrackIndex(safeIndex >= 0 ? safeIndex : 0);
-        
-        if (fromPlaylist === searchResults) {
-          setPlaylistName("Resultados de búsqueda");
+      // Solo actualizar playlist si NO viene de la cola
+      if (!isFromQueue) {
+        if (fromPlaylist && Array.isArray(fromPlaylist) && fromPlaylist.length > 0) {
+          const safeIndex = trackIndex !== undefined ? trackIndex : fromPlaylist.findIndex(t => t.id === track.id);
+          
+          setPlaylist([...fromPlaylist]);
+          setCurrentTrackIndex(safeIndex >= 0 ? safeIndex : 0);
+          
+          if (fromPlaylist === searchResults) {
+            setPlaylistName("Resultados de búsqueda");
+          } else {
+            const playlistEntry = Object.entries(importedPlaylists).find(([name, tracks]) => {
+              return tracks.length === fromPlaylist.length && 
+                     tracks.every((t, i) => t.id === fromPlaylist[i]?.id);
+            });
+            setPlaylistName(playlistEntry ? playlistEntry[0] : "Playlist personalizada");
+          }
         } else {
-          const playlistEntry = Object.entries(importedPlaylists).find(([name, tracks]) => {
-            return tracks.length === fromPlaylist.length && 
-                   tracks.every((t, i) => t.id === fromPlaylist[i]?.id);
-          });
-          setPlaylistName(playlistEntry ? playlistEntry[0] : "Playlist personalizada");
+          setPlaylist([track]);
+          setCurrentTrackIndex(0);
+          setPlaylistName("Canción individual");
         }
       } else {
-        setPlaylist([track]);
-        setCurrentTrackIndex(0);
-        setPlaylistName("Canción individual");
+        console.log(`🎵 Reproducing canción de cola sin actualizar playlist: ${track.title}`);
       }
       
       setIsDownloading(true);
@@ -339,8 +353,45 @@ export function App() {
     }
   }, [lastActionTime, isDownloading, pendingTrackId, searchResults, importedPlaylists]);
 
+  const getNextFromQueue = useCallback((saveContext: boolean = false): Track | null => {
+    if (queue.length === 0) return null;
+    
+    // Si necesitamos guardar el contexto y no estamos ya reproducing desde la cola
+    if (saveContext && !isPlayingFromQueue && currentTrack) {
+      setOriginalPlaylistContext({
+        playlist: [...playlist],
+        currentIndex: currentTrackIndex,
+        playlistName: playlistName
+      });
+      console.log(`💾 Guardando contexto de playlist: "${playlistName}", canción ${currentTrackIndex + 1}/${playlist.length}`);
+    }
+    
+    // Obtener la primera canción de la cola
+    const nextQueueItem = queue[0];
+    
+    // Remover de la cola
+    setQueue(prev => prev.slice(1));
+    
+    return nextQueueItem.track;
+  }, [queue, isPlayingFromQueue, currentTrack, playlist, currentTrackIndex, playlistName]);
+
+  const restoreOriginalPlaylistContext = useCallback(() => {
+    if (originalPlaylistContext) {
+      console.log(`🔄 Restaurando contexto de playlist: "${originalPlaylistContext.playlistName}", canción ${originalPlaylistContext.currentIndex + 1}/${originalPlaylistContext.playlist.length}`);
+      
+      setPlaylist(originalPlaylistContext.playlist);
+      setCurrentTrackIndex(originalPlaylistContext.currentIndex);
+      setPlaylistName(originalPlaylistContext.playlistName);
+      setIsPlayingFromQueue(false);
+      setOriginalPlaylistContext(null);
+      
+      return true;
+    }
+    return false;
+  }, [originalPlaylistContext]);
+
   const handleSongEnded = useCallback(() => {
-    console.log(`🎵 Canción terminada. RepeatMode: ${repeatMode}, Playlist length: ${playlist.length}`);
+    console.log(`🎵 Canción terminada. RepeatMode: ${repeatMode}, Playlist length: ${playlist.length}, Queue length: ${queue.length}, IsPlayingFromQueue: ${isPlayingFromQueue}`);
     
     if (repeatMode === "one") {
       if (currentTrack) {
@@ -356,14 +407,69 @@ export function App() {
       return;
     }
     
-    // Para "all" y "off", verificar si hay más canciones
+    // CASO 1: Hay más canciones en la cola
+    if (queue.length > 0) {
+      const nextTrackFromQueue = getNextFromQueue(!isPlayingFromQueue); // Solo guardar contexto si no estamos ya en cola
+      if (nextTrackFromQueue) {
+        console.log(`🎵 Reproduciendo siguiente de la cola: ${nextTrackFromQueue.title}`);
+        handleTrackSelect(nextTrackFromQueue, undefined, undefined, true); // isFromQueue = true
+        setIsPlayingFromQueue(true);
+        return;
+      }
+    }
+    
+    // CASO 2: No hay más canciones en la cola Y estábamos reproducing desde la cola
+    if (queue.length === 0 && isPlayingFromQueue && originalPlaylistContext) {
+      console.log(`🔄 Cola vacía, restaurando contexto original...`);
+      const savedContext = originalPlaylistContext;
+      
+      // Restaurar estado
+      setPlaylist(savedContext.playlist);
+      setCurrentTrackIndex(savedContext.currentIndex);
+      setPlaylistName(savedContext.playlistName);
+      setIsPlayingFromQueue(false);
+      setOriginalPlaylistContext(null);
+      
+      // Continuar con la siguiente canción de la playlist original
+      let nextIndex;
+      if (isShuffle) {
+        const availableIndexes = savedContext.playlist.map((_, index) => index).filter(index => index !== savedContext.currentIndex);
+        if (availableIndexes.length === 0) {
+          console.log("🔀 No hay más canciones disponibles para shuffle en playlist restaurada");
+          setIsPlaying(false);
+          return;
+        }
+        nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      } else {
+        if (repeatMode === "all") {
+          nextIndex = (savedContext.currentIndex + 1) % savedContext.playlist.length;
+        } else {
+          if (savedContext.currentIndex >= savedContext.playlist.length - 1) {
+            console.log("⏹️ Última canción en playlist restaurada modo 'off', pausando");
+            setIsPlaying(false);
+            return;
+          }
+          nextIndex = savedContext.currentIndex + 1;
+        }
+      }
+      
+      const nextTrack = savedContext.playlist[nextIndex];
+      if (nextTrack) {
+        console.log(`🎵 Continuando con playlist restaurada: ${nextTrack.title} (${nextIndex + 1}/${savedContext.playlist.length})`);
+        handleTrackSelect(nextTrack, savedContext.playlist, nextIndex);
+        return;
+      }
+    }
+    
+    // CASO 3: Playlist normal (no hay cola y no estamos reproducing desde cola)
+    setIsPlayingFromQueue(false);
+    
     if (playlist.length <= 1) {
       console.log("📭 No hay más canciones en la playlist, pausando");
       setIsPlaying(false);
       return;
     }
     
-    // Determinar siguiente canción
     let nextIndex;
     if (isShuffle) {
       const availableIndexes = playlist.map((_, index) => index).filter(index => index !== currentTrackIndex);
@@ -375,11 +481,9 @@ export function App() {
       nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
       if (repeatMode === "all") {
-        // En modo "all", volver al inicio cuando termine la playlist
         nextIndex = (currentTrackIndex + 1) % playlist.length;
         console.log(`🔄 Modo "all": avanzando a canción ${nextIndex + 1}/${playlist.length}`);
       } else {
-        // En modo "off", solo avanzar si no es la última canción
         if (currentTrackIndex >= playlist.length - 1) {
           console.log("⏹️ Última canción en modo 'off', pausando");
           setIsPlaying(false);
@@ -398,7 +502,7 @@ export function App() {
       console.log("❌ No se encontró la siguiente canción, pausando");
       setIsPlaying(false);
     }
-  }, [repeatMode, currentTrack, playlist, currentTrackIndex, isShuffle, handleTrackSelect]);
+  }, [repeatMode, currentTrack, playlist, currentTrackIndex, isShuffle, handleTrackSelect, queue, getNextFromQueue, isPlayingFromQueue, originalPlaylistContext]);
 
   // Music service setup (optimizado)
   useEffect(() => {
@@ -552,11 +656,74 @@ export function App() {
   const handleSkipForward = useCallback(() => {
     const now = Date.now();
     
-    if (now - lastActionTime < 500 || playlist.length === 0 || pendingTrackId) {
+    if (now - lastActionTime < 500 || pendingTrackId) {
       return;
     }
     
     setLastActionTime(now);
+    
+    console.log(`⏭️ Skip forward - Queue length: ${queue.length}, IsPlayingFromQueue: ${isPlayingFromQueue}`);
+    
+    // CASO 1: Hay canciones en la cola
+    if (queue.length > 0) {
+      const nextTrackFromQueue = getNextFromQueue(!isPlayingFromQueue); // Solo guardar contexto si no estamos ya en cola
+      if (nextTrackFromQueue) {
+        console.log(`⏭️ Saltando a siguiente de la cola: ${nextTrackFromQueue.title}`);
+        handleTrackSelect(nextTrackFromQueue, undefined, undefined, true); // isFromQueue = true
+        setIsPlayingFromQueue(true);
+        return;
+      }
+    }
+    
+    // CASO 2: No hay más canciones en la cola Y estábamos reproducing desde la cola
+    if (queue.length === 0 && isPlayingFromQueue && originalPlaylistContext) {
+      console.log(`⏭️ Cola vacía en skip, restaurando contexto original...`);
+      const savedContext = originalPlaylistContext;
+      
+      // Restaurar estado
+      setPlaylist(savedContext.playlist);
+      setCurrentTrackIndex(savedContext.currentIndex);
+      setPlaylistName(savedContext.playlistName);
+      setIsPlayingFromQueue(false);
+      setOriginalPlaylistContext(null);
+      
+      // Avanzar a la siguiente canción de la playlist original
+      let nextIndex;
+      if (isShuffle) {
+        const availableIndexes = savedContext.playlist.map((_, index) => index).filter(index => index !== savedContext.currentIndex);
+        if (availableIndexes.length === 0) {
+          console.log("🔀 No hay más canciones disponibles para shuffle en playlist restaurada");
+          setIsPlaying(false);
+          return;
+        }
+        nextIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
+      } else {
+        if (repeatMode === "all") {
+          nextIndex = (savedContext.currentIndex + 1) % savedContext.playlist.length;
+        } else {
+          if (savedContext.currentIndex >= savedContext.playlist.length - 1) {
+            console.log("⏹️ Última canción en playlist restaurada modo 'off', pausando");
+            setIsPlaying(false);
+            return;
+          }
+          nextIndex = savedContext.currentIndex + 1;
+        }
+      }
+      
+      const nextTrack = savedContext.playlist[nextIndex];
+      if (nextTrack) {
+        console.log(`⏭️ Saltando en playlist restaurada: ${nextTrack.title} (${nextIndex + 1}/${savedContext.playlist.length})`);
+        handleTrackSelect(nextTrack, savedContext.playlist, nextIndex);
+        return;
+      }
+    }
+    
+    // CASO 3: Playlist normal
+    setIsPlayingFromQueue(false);
+    
+    if (playlist.length === 0) {
+      return;
+    }
     
     let nextIndex;
     if (isShuffle) {
@@ -564,15 +731,12 @@ export function App() {
       nextIndex = availableIndexes.length === 0 ? currentTrackIndex : 
         availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
     } else {
-      // Lógica mejorada para repeat mode "all"
       if (repeatMode === "all") {
         nextIndex = (currentTrackIndex + 1) % playlist.length;
       } else {
-        // Para "off", solo avanzar si no es la última canción
         if (currentTrackIndex < playlist.length - 1) {
           nextIndex = currentTrackIndex + 1;
         } else {
-          // Última canción en modo "off" - parar
           setIsPlaying(false);
           return;
         }
@@ -581,9 +745,10 @@ export function App() {
     
     const nextTrack = playlist[nextIndex];
     if (nextTrack) {
+      console.log(`⏭️ Saltando en playlist normal: ${nextTrack.title}`);
       handleTrackSelect(nextTrack, playlist, nextIndex);
     }
-  }, [lastActionTime, playlist, pendingTrackId, isShuffle, currentTrackIndex, repeatMode, handleTrackSelect]);
+  }, [lastActionTime, playlist, pendingTrackId, isShuffle, currentTrackIndex, repeatMode, handleTrackSelect, queue, getNextFromQueue, isPlayingFromQueue, originalPlaylistContext]);
 
   const handleSkipBack = useCallback(() => {
     const now = Date.now();
@@ -671,6 +836,45 @@ export function App() {
     setIsShuffle(shuffle);
   }, []);
 
+  // Funciones para la cola de reproducción
+  const handleAddToQueue = useCallback((track: Track) => {
+    const queueItem: QueueItem = {
+      track,
+      addedAt: Date.now(),
+      id: `queue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    };
+    
+    setQueue(prev => [...prev, queueItem]);
+    console.log(`📝 Canción "${track.title}" añadida a la cola`);
+  }, []);
+
+  const handlePlayFromQueue = useCallback((queueItem: QueueItem) => {
+    // Guardar contexto antes de reproducir desde la cola (si no estamos ya en cola)
+    if (!isPlayingFromQueue && currentTrack) {
+      setOriginalPlaylistContext({
+        playlist: [...playlist],
+        currentIndex: currentTrackIndex,
+        playlistName: playlistName
+      });
+      console.log(`💾 Guardando contexto antes de reproducir desde cola: "${playlistName}", canción ${currentTrackIndex + 1}/${playlist.length}`);
+    }
+    
+    // Reproducir la canción de la cola
+    handleTrackSelect(queueItem.track, undefined, undefined, true); // isFromQueue = true
+    
+    // Remover de la cola
+    setQueue(prev => prev.filter(item => item.id !== queueItem.id));
+    
+    // Marcar que estamos reproducing desde la cola
+    setIsPlayingFromQueue(true);
+    
+    console.log(`🎵 Reproduciendo desde la cola: "${queueItem.track.title}"`);
+  }, [isPlayingFromQueue, currentTrack, playlist, currentTrackIndex, playlistName, handleTrackSelect]);
+
+  const handleRemoveFromQueue = useCallback((queueItemId: string) => {
+    setQueue(prev => prev.filter(item => item.id !== queueItemId));
+  }, []);
+
     // Memoizar props complejas
     const playlistInfo = useMemo(() => ({
       name: playlistName,
@@ -696,6 +900,9 @@ export function App() {
             onSearch={handleSearch}
             isLoading={isLoading}
             searchQuery={searchQuery}
+            queue={queue}
+            onAddToQueue={handleAddToQueue}
+            onPlayFromQueue={handlePlayFromQueue}
             isDarkMode={isDarkMode}
             onToggleDarkMode={toggleDarkMode}
             // NUEVO: Props para compresión

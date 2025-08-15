@@ -1,11 +1,17 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import { Music, Clock } from 'lucide-react';
 import { Track } from '../types/index';
+import { ContextMenu } from './ContextMenu';
 
 interface TrackListProps {
   tracks: Track[];
   onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
   compact?: boolean;
+  onAddToPlaylist?: (track: Track, playlistName: string) => void;
+  onRemoveFromPlaylist?: (track: Track) => void;
+  onAddToQueue?: (track: Track) => void;
+  isInPlaylist?: boolean;
+  currentPlaylistName?: string;
 }
 
 // Componente individual memoizado para mejor performance
@@ -14,25 +20,72 @@ const TrackItem = memo(({
   index, 
   tracks, 
   onTrackSelect, 
-  compact 
+  compact,
+  onAddToPlaylist,
+  onRemoveFromPlaylist,
+  onAddToQueue,
+  isInPlaylist,
+  currentPlaylistName
 }: {
   track: Track;
   index: number;
   tracks: Track[];
   onTrackSelect: (track: Track, fromPlaylist?: Track[], trackIndex?: number) => void;
   compact?: boolean;
+  onAddToPlaylist?: (track: Track, playlistName: string) => void;
+  onRemoveFromPlaylist?: (track: Track) => void;
+  onAddToQueue?: (track: Track) => void;
+  isInPlaylist?: boolean;
+  currentPlaylistName?: string;
 }) => {
+  const [contextMenu, setContextMenu] = useState<{
+    isVisible: boolean;
+    x: number;
+    y: number;
+  }>({
+    isVisible: false,
+    x: 0,
+    y: 0
+  });
+
   const handleClick = useCallback(() => {
     onTrackSelect(track, tracks, index);
   }, [track, tracks, index, onTrackSelect]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({
+      isVisible: true,
+      x: e.clientX,
+      y: e.clientY
+    });
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(prev => ({ ...prev, isVisible: false }));
+  }, []);
+
+  const handleAddToPlaylist = useCallback((track: Track, playlistName: string) => {
+    onAddToPlaylist?.(track, playlistName);
+  }, [onAddToPlaylist]);
+
+  const handleRemoveFromPlaylist = useCallback((track: Track) => {
+    onRemoveFromPlaylist?.(track);
+  }, [onRemoveFromPlaylist]);
+
+  const handleAddToQueue = useCallback((track: Track) => {
+    onAddToQueue?.(track);
+  }, [onAddToQueue]);
+
   return (
-    <button
-      onClick={handleClick}
-      className={`w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${
-        compact ? 'py-2' : ''
-      }`}
-    >
+    <>
+      <button
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        className={`w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-600 last:border-b-0 ${
+          compact ? 'py-2' : ''
+        }`}
+      >
       <div className="flex items-center gap-3">
         <div className="relative flex-shrink-0">
           <img
@@ -77,13 +130,36 @@ const TrackItem = memo(({
           <span className="text-xs">{track.duration}</span>
         </div>
       </div>
-    </button>
+      </button>
+
+      <ContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        track={track}
+        isVisible={contextMenu.isVisible}
+        onClose={handleCloseContextMenu}
+        onAddToPlaylist={handleAddToPlaylist}
+        onRemoveFromPlaylist={handleRemoveFromPlaylist}
+        onAddToQueue={handleAddToQueue}
+        isInPlaylist={isInPlaylist}
+        currentPlaylistName={currentPlaylistName}
+      />
+    </>
   );
 });
 
 TrackItem.displayName = 'TrackItem';
 
-export const TrackList = memo(({ tracks, onTrackSelect, compact = false }: TrackListProps) => {
+export const TrackList = memo(({ 
+  tracks, 
+  onTrackSelect, 
+  compact = false, 
+  onAddToPlaylist, 
+  onRemoveFromPlaylist, 
+  onAddToQueue, 
+  isInPlaylist, 
+  currentPlaylistName 
+}: TrackListProps) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 overflow-hidden">
       {tracks.map((track, index) => (
@@ -94,6 +170,11 @@ export const TrackList = memo(({ tracks, onTrackSelect, compact = false }: Track
           tracks={tracks}
           onTrackSelect={onTrackSelect}
           compact={compact}
+          onAddToPlaylist={onAddToPlaylist}
+          onRemoveFromPlaylist={onRemoveFromPlaylist}
+          onAddToQueue={onAddToQueue}
+          isInPlaylist={isInPlaylist}
+          currentPlaylistName={currentPlaylistName}
         />
       ))}
     </div>

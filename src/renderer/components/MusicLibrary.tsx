@@ -2,7 +2,7 @@ import React, { useState, useEffect, memo, useCallback, useMemo } from "react";
 import { TrackList } from "./TrackList";
 import { ImportPlaylist } from "./ImportPlaylist";
 import { PlaylistCard } from "./PlaylistCard";
-import { Track } from "../types/index";
+import { Track, QueueItem } from "../types/index";
 import { SearchIcon, Upload, Music } from "lucide-react";
 import { SettingsView } from './SettingsView';
 
@@ -13,6 +13,9 @@ interface MusicLibraryProps {
   onSearch: (query: string) => void;
   isLoading: boolean;
   searchQuery: string;
+  queue?: QueueItem[];
+  onAddToQueue?: (track: Track) => void;
+  onPlayFromQueue?: (queueItem: QueueItem) => void;
 }
 
 export const MusicLibrary = memo(({
@@ -22,6 +25,9 @@ export const MusicLibrary = memo(({
   onSearch,
   isLoading,
   searchQuery,
+  queue,
+  onAddToQueue,
+  onPlayFromQueue,
   isDarkMode,
   onToggleDarkMode,
   // NUEVO: Props para compresión
@@ -281,6 +287,63 @@ export const MusicLibrary = memo(({
     }
   }, []);
 
+  // Funciones para el menú contextual
+  const handleAddToPlaylist = useCallback(async (track: Track, playlistName: string) => {
+    try {
+      // Cargar la playlist actual
+      const currentTracks = await window.playlistAPI.loadPlaylist(playlistName);
+      
+      // Verificar si la canción ya está en la playlist
+      const trackExists = currentTracks.some(t => t.id === track.id);
+      if (trackExists) {
+        console.log(`La canción "${track.title}" ya está en la playlist "${playlistName}"`);
+        return;
+      }
+      
+      // Añadir la canción a la playlist
+      const updatedTracks = [...currentTracks, track];
+      await window.playlistAPI.savePlaylist(playlistName, updatedTracks);
+      
+      // Actualizar el estado local
+      setImportedPlaylists(prev => ({
+        ...prev,
+        [playlistName]: updatedTracks
+      }));
+      
+      console.log(`✅ Canción "${track.title}" añadida a la playlist "${playlistName}"`);
+    } catch (error) {
+      console.error('Error añadiendo canción a playlist:', error);
+    }
+  }, []);
+
+  const handleRemoveFromPlaylist = useCallback(async (track: Track, playlistName: string) => {
+    try {
+      // Cargar la playlist actual
+      const currentTracks = await window.playlistAPI.loadPlaylist(playlistName);
+      
+      // Remover la canción de la playlist
+      const updatedTracks = currentTracks.filter(t => t.id !== track.id);
+      await window.playlistAPI.savePlaylist(playlistName, updatedTracks);
+      
+      // Actualizar el estado local
+      setImportedPlaylists(prev => ({
+        ...prev,
+        [playlistName]: updatedTracks
+      }));
+      
+      console.log(`🗑️ Canción "${track.title}" eliminada de la playlist "${playlistName}"`);
+    } catch (error) {
+      console.error('Error eliminando canción de playlist:', error);
+    }
+  }, []);
+
+  const handleAddToQueueAction = useCallback((track: Track) => {
+    if (onAddToQueue) {
+      onAddToQueue(track);
+      console.log(`📝 Canción "${track.title}" añadida a la cola`);
+    }
+  }, [onAddToQueue]);
+
   // MEJORADO: Escuchar cambios en playlists y recargar automáticamente
   useEffect(() => {
     const handlePlaylistChanges = () => {
@@ -354,6 +417,9 @@ export const MusicLibrary = memo(({
                 onTrackSelect={(track, trackIndex) => {
                   onTrackSelect(track, tracks, trackIndex);
                 }}
+                onAddToPlaylist={handleAddToPlaylist}
+                onRemoveFromPlaylist={handleRemoveFromPlaylist}
+                onAddToQueue={handleAddToQueueAction}
               />
             ))}
           </div>
@@ -455,6 +521,9 @@ export const MusicLibrary = memo(({
                 <TrackList
                   tracks={popularMusic.slice(0, displayedResults)}
                   onTrackSelect={onTrackSelect}
+                  onAddToPlaylist={handleAddToPlaylist}
+                  onAddToQueue={handleAddToQueueAction}
+                  isInPlaylist={false}
                 />
                 {displayedResults < popularMusic.length && displayedResults < 100 && (
                   <div className="text-center mt-6">
@@ -522,6 +591,9 @@ export const MusicLibrary = memo(({
                 <TrackList
                   tracks={searchResults}
                   onTrackSelect={onTrackSelect}
+                  onAddToPlaylist={handleAddToPlaylist}
+                  onAddToQueue={handleAddToQueueAction}
+                  isInPlaylist={false}
                 />
               </>
             )}
@@ -556,7 +628,13 @@ export const MusicLibrary = memo(({
           <section>
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Tu Biblioteca</h2>
             {searchResults.length > 0 ? (
-              <TrackList tracks={searchResults} onTrackSelect={onTrackSelect} />
+              <TrackList 
+                tracks={searchResults} 
+                onTrackSelect={onTrackSelect}
+                onAddToPlaylist={handleAddToPlaylist}
+                onAddToQueue={handleAddToQueueAction}
+                isInPlaylist={false}
+              />
             ) : (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center border dark:border-gray-700">
                 <p className="text-gray-500 dark:text-gray-400">

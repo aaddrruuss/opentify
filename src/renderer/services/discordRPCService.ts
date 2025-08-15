@@ -124,9 +124,15 @@ class DiscordRPCClient {
 
     // Actualizar cada 15 segundos mientras está reproduciendo
     this.updateInterval = setInterval(async () => {
-      if (this.isEnabled && this.currentTrack && this.isPlaying) {
-        // Re-enviar información completa periódicamente para mantener sincronización
-        await this.updateTrack(this.currentTrack, this.currentPosition, this.isPlaying);
+      try {
+        if (this.isEnabled && this.currentTrack && this.isPlaying) {
+          // Re-enviar información completa periódicamente para mantener sincronización
+          await this.updateTrack(this.currentTrack, this.currentPosition, this.isPlaying);
+        }
+      } catch (error) {
+        console.error('Error in periodic Discord RPC update:', error);
+        // Si hay errores repetidos, deshabilitar temporalmente
+        this.stopPeriodicUpdates();
       }
     }, 15000);
   }
