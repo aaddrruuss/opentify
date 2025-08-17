@@ -38,7 +38,7 @@ Opentify es una aplicación de escritorio desarrollada con Electron que permite 
 *Interfaz principal con historial de búsquedas y reproductor integrado*
 
 ### Gestión de Playlists
-![Playlists](./assets/app_images/playlists.png)
+![Playlists](./assets/app_images/playlist.png)
 *Vista de playlists importadas con carátulas personalizadas*
 
 ### Búsqueda de Música
