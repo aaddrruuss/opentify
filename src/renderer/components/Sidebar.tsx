@@ -36,14 +36,9 @@ export function Sidebar({
       icon: SearchIcon,
     },
     {
-      id: 'library',
+      id: 'playlists',
       label: 'Tu Biblioteca',
       icon: LibraryIcon,
-    },
-    {
-      id: 'playlists',
-      label: 'Crear Playlist',
-      icon: PlusCircleIcon,
     },
     {
       id: 'liked',
@@ -85,22 +80,26 @@ export function Sidebar({
   }, []);
 
   return (
-    <div className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full">
+    <div className="w-64 bg-black flex flex-col h-full">
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-[#2196F3]">Opentify</h1>
+        <h1 className="text-2xl font-bold text-white">Opentify</h1>
       </div>
-      <nav className="flex-1">
-        <ul>
+      <nav className="flex-1 px-3">
+        <ul className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon
             return (
               <li key={item.id}>
                 <button
-                  className={`flex items-center w-full px-6 py-3 text-left transition-colors ${currentView === item.id ? 'text-[#2196F3] bg-[#F5F5F5] dark:bg-gray-800 font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-[#F5F5F5] dark:hover:bg-gray-800'}`}
+                  className={`flex items-center w-full px-3 py-2 text-left transition-colors rounded-md ${
+                    currentView === item.id 
+                      ? 'text-white bg-gray-800 font-medium' 
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  }`}
                   onClick={() => setCurrentView(item.id)}
                 >
-                  <Icon className="w-5 h-5 mr-3" />
-                  <span>{item.label}</span>
+                  <Icon className="w-6 h-6 mr-3" />
+                  <span className="font-medium">{item.label}</span>
                 </button>
               </li>
             )
@@ -110,14 +109,14 @@ export function Sidebar({
 
       {/* Import Manager Button - Solo mostrar si hay importaciones activas */}
       {activeImports > 0 && (
-        <div className="px-4 mb-4">
+        <div className="px-6 mb-4">
           <button
             onClick={() => setShowImportManager(true)}
-            className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors group"
+            className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm font-medium text-blue-400 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition-colors group"
           >
             <Download className="h-5 w-5 animate-pulse" />
             <span className="flex-1">Importando playlists...</span>
-            <span className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+            <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
               {activeImports}
             </span>
           </button>
@@ -125,12 +124,12 @@ export function Sidebar({
       )}
 
       {/* Settings and Donation Buttons */}
-      <div className="p-6 border-t border-gray-200 dark:border-gray-700 space-y-3">
+      <div className="p-6 border-t border-gray-800 space-y-3 pb-24">
         <button 
           onClick={() => setCurrentView('settings')}
-          className={`flex items-center w-full text-sm transition-colors justify-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 shadow-md`}
+          className="flex items-center w-full text-sm transition-colors justify-center gap-2 px-4 py-2 bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 hover:text-white"
         >
-          <SettingsIcon className="w-5 h-5 text-[#2196F3]" />
+          <SettingsIcon className="w-5 h-5 text-gray-400" />
           <span className="font-medium">Configuración</span>
         </button>
 
@@ -144,7 +143,7 @@ export function Sidebar({
               console.error('Error opening donation link:', error);
             }
           }}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 rounded-md hover:from-yellow-500 hover:to-yellow-600 transition-all duration-200 font-medium text-sm shadow-md hover:shadow-lg transform hover:scale-105"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-black rounded-md hover:from-blue-500 hover:to-blue-600 transition-all duration-200 font-medium text-sm transform hover:scale-105"
         >
           <Heart className="h-4 w-4" />
           Apoyar a Opentify

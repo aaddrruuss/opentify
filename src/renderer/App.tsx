@@ -931,7 +931,7 @@ export function App() {
     }), [playlistName, currentTrackIndex, playlist.length]);
 
   return (
-    <div className="flex h-screen w-full bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
+    <div className="flex h-screen w-full bg-black text-white">
       <Sidebar 
         currentView={currentView} 
         setCurrentView={setCurrentView}
@@ -940,7 +940,7 @@ export function App() {
       />
       
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main className="flex-1 overflow-y-auto bg-[#F5F5F5] dark:bg-gray-800 p-6 transition-colors">
+        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-900 to-black p-6 pb-24">
           <MusicLibrary
             onTrackSelect={handleTrackSelect}
             currentView={currentView}
@@ -963,46 +963,29 @@ export function App() {
           />
         </main>
         
+        
         {currentTrack && (
-          <div className="flex flex-col bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 transition-colors">
-            <div className="relative">
-              <NowPlaying
-                track={currentTrack}
-                isPlaying={isPlaying}
-                isDownloading={isDownloading}
-                playlistInfo={playlistInfo}
-              />
-              
-              {isPreloadingNext && !isDownloading && (
-                <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                  <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b border-[#2196F3] mr-2"></div>
-                    <span className="whitespace-nowrap">Precargando...</span>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <PlayerControls
-              isPlaying={isPlaying}
-              onPlayPause={handlePlayPause}
-              currentTime={currentTime}
-              duration={duration}
-              onSeek={handleSeek}
-              volume={volume}
-              onVolumeChange={handleVolumeChange}
-              onMuteToggle={handleMuteToggle}
-              isMuted={isMuted}
-              repeatMode={repeatMode}
-              onRepeatModeChange={handleRepeatModeChange}
-              isShuffle={isShuffle}
-              onShuffleToggle={handleShuffleToggle}
-              onSkipForward={handleSkipForward}
-              onSkipBack={handleSkipBack}
-              isDownloading={isDownloading}
-              isLoadingAudio={isLoadingAudio}
-            />
-          </div>
+          <PlayerControls
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            currentTime={currentTime}
+            duration={duration}
+            onSeek={handleSeek}
+            volume={volume}
+            onVolumeChange={handleVolumeChange}
+            onMuteToggle={handleMuteToggle}
+            isMuted={isMuted}
+            repeatMode={repeatMode}
+            onRepeatModeChange={handleRepeatModeChange}
+            isShuffle={isShuffle}
+            onShuffleToggle={handleShuffleToggle}
+            onSkipForward={handleSkipForward}
+            onSkipBack={handleSkipBack}
+            isDownloading={isDownloading}
+            isLoadingAudio={isLoadingAudio}
+            currentTrack={currentTrack}
+            playlistInfo={playlistInfo}
+          />
         )}
       </div>
     </div>

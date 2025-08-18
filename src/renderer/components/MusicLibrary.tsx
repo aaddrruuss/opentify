@@ -431,16 +431,16 @@ export const MusicLibrary = memo(({
     
     return (
       <section>
-        <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-gray-100">Tus Playlists</h2>
+        <h2 className="text-2xl font-bold mb-6 text-white">Tus Playlists</h2>
         
         <div className="mb-8">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border dark:border-gray-700">
+          <div className="bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-700">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+                <h3 className="text-lg font-medium text-white mb-2">
                   Gestionar Playlists
                 </h3>
-                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                <p className="text-gray-300 text-sm">
                   Importa tus playlists de Spotify usando archivos CSV exportados desde tu cuenta.
                 </p>
               </div>
@@ -449,7 +449,7 @@ export const MusicLibrary = memo(({
             <div className="flex gap-3">
               <button
                 onClick={() => setShowImportModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1DB954] text-white rounded-md hover:bg-green-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-black rounded-md hover:bg-green-400 transition-colors font-medium"
               >
                 <Upload className="h-4 w-4" />
                 Importar de Spotify
@@ -457,7 +457,7 @@ export const MusicLibrary = memo(({
               
               <button
                 onClick={() => setShowCreatePlaylistModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 Crear Playlist
@@ -600,7 +600,7 @@ export const MusicLibrary = memo(({
 
             {popularMusic.length > 0 && (
               <section className="mt-8">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Canciones más populares:</h2>
+                <h2 className="text-2xl font-bold mb-4 text-white">Canciones más populares:</h2>
                 <TrackList
                   tracks={popularMusic.slice(0, displayedResults)}
                   onTrackSelect={onTrackSelect}
@@ -612,7 +612,7 @@ export const MusicLibrary = memo(({
                   <div className="text-center mt-6">
                     <button
                       onClick={handleShowMore}
-                      className="px-6 py-3 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
+                      className="px-6 py-3 bg-blue-500 text-black rounded-md hover:bg-blue-400 transition-colors font-medium"
                     >
                       Mostrar {Math.min(10, popularMusic.length - displayedResults)} canciones más
                     </button>
@@ -620,7 +620,7 @@ export const MusicLibrary = memo(({
                 )}
                 {displayedResults >= 100 && (
                   <div className="text-center mt-4">
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    <p className="text-gray-400 text-sm">
                       Mostrando máximo 100 resultados
                     </p>
                   </div>
@@ -633,20 +633,20 @@ export const MusicLibrary = memo(({
       case "search":
         return (
           <section>
-            <div className="bg-white dark:bg-gray-800 rounded-md shadow p-4 mb-6 border dark:border-gray-700">
+            <div className="bg-gray-800 rounded-md shadow p-4 mb-6 border border-gray-700">
               <form onSubmit={handleSearchSubmit} className="flex gap-2">
                 <input
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder="Buscar canciones, artistas o álbumes"
-                  className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                  className="flex-1 p-3 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700 text-white placeholder-gray-400"
                   autoFocus
                 />
                 <button
                   type="submit"
                   disabled={isLoading || !inputValue.trim()}
-                  className="px-6 py-3 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-6 py-3 bg-blue-500 text-black rounded-md hover:bg-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
                 >
                   <SearchIcon className="h-5 w-5" />
                   Buscar
@@ -656,18 +656,18 @@ export const MusicLibrary = memo(({
 
             {isLoading && (
               <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#2196F3]"></div>
-                <p className="ml-4 text-gray-600 dark:text-gray-300">Buscando canciones...</p>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                <p className="ml-4 text-gray-300">Buscando canciones...</p>
               </div>
             )}
 
             {!isLoading && searchResults.length > 0 && (
               <>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  <h2 className="text-2xl font-bold text-white">
                     Resultados para "{searchQuery}"
                   </h2>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                  <span className="text-sm text-gray-400">
                     {searchResults.length} canciones encontradas (&lt; 15 min)
                   </span>
                 </div>
@@ -683,10 +683,10 @@ export const MusicLibrary = memo(({
 
             {!isLoading && searchQuery && searchResults.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-gray-500 dark:text-gray-400 mb-2">
+                <p className="text-gray-400 mb-2">
                   No se encontraron canciones para "{searchQuery}"
                 </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
+                <p className="text-sm text-gray-500">
                   Intenta con términos más específicos. Solo se muestran canciones de menos de 15 minutos.
                 </p>
               </div>
@@ -694,11 +694,11 @@ export const MusicLibrary = memo(({
 
             {!isLoading && !searchQuery && (
               <div className="text-center py-12">
-                <SearchIcon className="h-16 w-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400 mb-2">
+                <SearchIcon className="h-16 w-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-2">
                   Busca tu música favorita
                 </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
+                <p className="text-sm text-gray-500">
                   Solo se mostrarán canciones de menos de 15 minutos de duración
                 </p>
               </div>
@@ -709,7 +709,7 @@ export const MusicLibrary = memo(({
       case "library":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Tu Biblioteca</h2>
+            <h2 className="text-2xl font-bold mb-4 text-white">Tu Biblioteca</h2>
             {searchResults.length > 0 ? (
               <TrackList 
                 tracks={searchResults} 
@@ -719,8 +719,8 @@ export const MusicLibrary = memo(({
                 isInPlaylist={false}
               />
             ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center border dark:border-gray-700">
-                <p className="text-gray-500 dark:text-gray-400">
+              <div className="bg-gray-800 rounded-lg shadow-sm p-8 text-center border border-gray-700">
+                <p className="text-gray-400">
                   Tu biblioteca está vacía. Busca música para comenzar.
                 </p>
               </div>
@@ -734,9 +734,9 @@ export const MusicLibrary = memo(({
       case "liked":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Canciones Favoritas</h2>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center border dark:border-gray-700">
-              <p className="text-gray-500 dark:text-gray-400">
+            <h2 className="text-2xl font-bold mb-4 text-white">Canciones Favoritas</h2>
+            <div className="bg-gray-800 rounded-lg shadow-sm p-8 text-center border border-gray-700">
+              <p className="text-gray-400">
                 Aún no has marcado canciones como favoritas.
               </p>
             </div>
@@ -763,13 +763,13 @@ export const MusicLibrary = memo(({
       {/* Modal para crear playlist */}
       {showCreatePlaylistModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-white mb-4">
               Crear Nueva Playlist
             </h2>
             
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 Nombre de la playlist
               </label>
               <input
@@ -784,7 +784,7 @@ export const MusicLibrary = memo(({
                   }
                 }}
                 placeholder="Ej: Mi Playlist Favorita"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+                className="w-full px-3 py-2 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-700 text-white placeholder-gray-400"
                 autoFocus
                 maxLength={50}
               />
@@ -793,14 +793,14 @@ export const MusicLibrary = memo(({
             <div className="flex gap-3 justify-end">
               <button
                 onClick={handleCancelCreatePlaylist}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                className="px-4 py-2 text-gray-400 hover:text-gray-200 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCreatePlaylist}
                 disabled={!newPlaylistName.trim()}
-                className="px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-blue-500 text-black rounded-md hover:bg-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
               >
                 <Plus className="h-4 w-4" />
                 Crear Playlist

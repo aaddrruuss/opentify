@@ -28,6 +28,18 @@ interface PlayerControlsProps {
   onSkipBack: () => void;
   isDownloading?: boolean;
   isLoadingAudio?: boolean;
+  currentTrack?: {
+    id: string;
+    title: string;
+    artist: string;
+    cover?: string;
+    duration: string;
+  } | null;
+  playlistInfo?: {
+    name: string;
+    current: number;
+    total: number;
+  };
 }
 
 export function PlayerControls({
@@ -48,6 +60,8 @@ export function PlayerControls({
   onSkipBack,
   isDownloading = false,
   isLoadingAudio = false,
+  currentTrack,
+  playlistInfo,
 }: PlayerControlsProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isVolumeDragging, setIsVolumeDragging] = useState(false);
@@ -203,149 +217,194 @@ export function PlayerControls({
   const areOtherControlsDisabled = isDownloading; // Other controls disabled only during download
 
   return (
-    <div className="px-6 py-4 flex-shrink-0">
-      <div className="flex items-center justify-center mb-2">
-        <button
-          className={`mx-2 transition-colors ${
-            isShuffle ? "text-[#2196F3]" : "text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3]"
-          } ${areOtherControlsDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={toggleShuffle}
-          disabled={areOtherControlsDisabled}
-          title="Shuffle"
-        >
-          <ShuffleIcon className="h-4 w-4" />
-        </button>
-
-        <button
-          className={`mx-2 text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3] transition-colors ${
-            areSkipButtonsDisabled ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-          onClick={onSkipBack}
-          disabled={areSkipButtonsDisabled}
-          title="Previous"
-        >
-          <SkipBackIcon className="h-5 w-5" />
-        </button>
-
-        <button
-          className={`mx-3 p-2 rounded-full bg-[#2196F3] text-white transition-colors ${
-            isPlayButtonDisabled ? 'opacity-75 cursor-not-allowed' : 'hover:bg-blue-600'
-          }`}
-          onClick={onPlayPause}
-          disabled={isPlayButtonDisabled}
-          title={
-            isDownloading ? "Descargando canción..." : 
-            isLoadingAudio ? "Cargando audio..." : 
-            (isPlaying ? "Pause" : "Play")
-          }
-        >
-          {isDownloading || isLoadingAudio ? (
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
-          ) : isPlaying ? (
-            <PauseIcon className="h-6 w-6" />
-          ) : (
-            <PlayIcon className="h-6 w-6 ml-0.5" />
-          )}
-        </button>
-
-        <button
-          className={`mx-2 text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3] transition-colors ${
-            areSkipButtonsDisabled ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-          onClick={onSkipForward}
-          disabled={areSkipButtonsDisabled}
-          title="Next"
-        >
-          <SkipForwardIcon className="h-5 w-5" />
-        </button>
-
-        <button
-          className={`mx-2 transition-colors ${
-            repeatMode !== "off"
-              ? "text-[#2196F3]"
-              : "text-gray-500 hover:text-[#2196F3] dark:text-gray-400 dark:hover:text-[#2196F3]"
-          } ${areOtherControlsDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={toggleRepeat}
-          disabled={areOtherControlsDisabled}
-          title={`Repeat: ${repeatMode}`}
-        >
-          <div className="relative">
-            <RepeatIcon className="h-4 w-4" />
-            {repeatMode === "one" && (
-              <span className="absolute -top-1 -right-1 text-xs font-bold">
-                1
-              </span>
-            )}
-          </div>
-        </button>
+    <div className="bg-black border-t border-gray-800 px-4 py-3 flex items-center justify-between w-full h-20 fixed bottom-0 left-0 right-0 z-40">
+      {/* Columna izquierda - Información de la canción actual */}
+      <div className="flex items-center space-x-3 w-1/3 min-w-0">
+        {currentTrack && (
+          <>
+            <div className="relative flex-shrink-0">
+              {currentTrack.cover ? (
+                <img
+                  src={currentTrack.cover}
+                  alt={currentTrack.title}
+                  className="w-14 h-14 rounded object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget as HTMLImageElement;
+                    target.style.display = 'none';
+                    const fallback = target.nextElementSibling as HTMLElement;
+                    if (fallback) fallback.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div className={`absolute inset-0 w-14 h-14 bg-gray-600 rounded flex items-center justify-center ${currentTrack.cover ? 'hidden' : 'flex'}`}>
+                <svg className="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM15.657 6.343a1 1 0 011.414 0A9.972 9.972 0 0119 12a9.972 9.972 0 01-1.929 5.657 1 1 0 11-1.414-1.414A7.971 7.971 0 0017 12a7.971 7.971 0 00-1.343-4.243 1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-white text-sm font-medium truncate">
+                {currentTrack.title}
+              </div>
+              <div className="text-gray-400 text-xs truncate">
+                {currentTrack.artist}
+                {playlistInfo && playlistInfo.total > 1 && (
+                  <span> • {playlistInfo.current}/{playlistInfo.total} en "{playlistInfo.name}"</span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="flex items-center">
-        <span className="text-xs text-gray-500 dark:text-gray-400 w-10 text-right">
-          {formatTime(displayTime)}
-        </span>
-
-        <div
-          ref={progressRef}
-          className={`flex-1 mx-3 h-3 bg-gray-200 dark:bg-gray-700 rounded relative group py-1 ${
-            areOtherControlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-          }`}
-          onClick={!areOtherControlsDisabled ? handleProgressClick : undefined}
-          onMouseDown={!areOtherControlsDisabled ? handleProgressMouseDown : undefined}
-        >
-          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 rounded transform -translate-y-1/2">
-            <div
-              className="absolute h-full bg-[#2196F3] rounded pointer-events-none"
-              style={{ width: `${progressPercentage}%` }}
-            />
-            {!isDownloading && (
-              <div
-                className={`absolute h-3 w-3 bg-[#2196F3] rounded-full shadow top-1/2 transform -translate-y-1/2 pointer-events-none transition-opacity ${
-                  isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                }`}
-                style={{
-                  left: `${progressPercentage}%`,
-                  transform: "translateX(-50%) translateY(-50%)",
-                }}
-              />
-            )}
-          </div>
-        </div>
-
-        <span className="text-xs text-gray-500 dark:text-gray-400 w-10">
-          {formatTime(duration)}
-        </span>
-
-        <div className="ml-6 flex items-center">
+      {/* Columna central - Controles principales y barra de progreso */}
+      <div className="flex flex-col items-center w-1/3 max-w-lg">
+        {/* Controles de reproducción */}
+        <div className="flex items-center space-x-2 mb-2">
           <button
-            onClick={toggleMute}
-            className="text-gray-500 dark:text-gray-400 hover:text-[#2196F3] dark:hover:text-[#2196F3] mr-2 transition-colors"
-            title={isMuted ? "Unmute" : "Mute"}
+            className={`transition-colors hover:scale-105 ${
+              isShuffle ? "text-[#2196F3]" : "text-gray-400 hover:text-white"
+            } ${areOtherControlsDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={toggleShuffle}
+            disabled={areOtherControlsDisabled}
+            title="Shuffle"
           >
-            {isMuted || volume === 0 ? (
-              <VolumeXIcon className="h-4 w-4" />
+            <ShuffleIcon className="h-4 w-4" />
+          </button>
+
+          <button
+            className={`text-gray-400 hover:text-white transition-colors hover:scale-105 ${
+              areSkipButtonsDisabled ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            onClick={onSkipBack}
+            disabled={areSkipButtonsDisabled}
+            title="Previous"
+          >
+            <SkipBackIcon className="h-5 w-5" />
+          </button>
+
+          <button
+            className={`p-2 rounded-full bg-white text-black hover:scale-105 transition-all duration-200 ${
+              isPlayButtonDisabled ? 'opacity-75 cursor-not-allowed' : 'hover:bg-gray-200'
+            }`}
+            onClick={onPlayPause}
+            disabled={isPlayButtonDisabled}
+            title={
+              isDownloading ? "Descargando canción..." : 
+              isLoadingAudio ? "Cargando audio..." : 
+              (isPlaying ? "Pause" : "Play")
+            }
+          >
+            {isDownloading || isLoadingAudio ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent" />
+            ) : isPlaying ? (
+              <PauseIcon className="h-4 w-4" />
             ) : (
-              <Volume2Icon className="h-4 w-4" />
+              <PlayIcon className="h-4 w-4 ml-0.5" />
             )}
           </button>
-          <div
-            ref={volumeRef}
-            className="w-24 h-3 bg-gray-200 dark:bg-gray-700 rounded relative cursor-pointer group py-1"
-            onClick={handleVolumeClick}
-            onMouseDown={handleVolumeMouseDown}
+
+          <button
+            className={`text-gray-400 hover:text-white transition-colors hover:scale-105 ${
+              areSkipButtonsDisabled ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            onClick={onSkipForward}
+            disabled={areSkipButtonsDisabled}
+            title="Next"
           >
-            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-700 rounded transform -translate-y-1/2">
-              <div
-                className="absolute h-full bg-[#2196F3] rounded pointer-events-none"
-                style={{ width: `${displayVolume}%` }}
-              />
-              <div
-                className={`absolute h-3 w-3 bg-[#2196F3] rounded-full shadow top-1/2 transform -translate-y-1/2 pointer-events-none transition-opacity ${
-                  isVolumeDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                }`}
-                style={{ left: `${displayVolume}%`, transform: "translateX(-50%) translateY(-50%)" }}
-              />
+            <SkipForwardIcon className="h-5 w-5" />
+          </button>
+
+          <button
+            className={`transition-colors hover:scale-105 ${
+              repeatMode !== "off"
+                ? "text-[#2196F3]"
+                : "text-gray-400 hover:text-white"
+            } ${areOtherControlsDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={toggleRepeat}
+            disabled={areOtherControlsDisabled}
+            title={`Repeat: ${repeatMode}`}
+          >
+            <div className="relative">
+              <RepeatIcon className="h-4 w-4" />
+              {repeatMode === "one" && (
+                <span className="absolute -top-1 -right-1 text-xs font-bold bg-[#2196F3] text-white rounded-full w-3 h-3 flex items-center justify-center text-[8px]">
+                  1
+                </span>
+              )}
             </div>
+          </button>
+        </div>
+
+        {/* Barra de progreso */}
+        <div className="flex items-center w-full space-x-2">
+          <span className="text-xs text-gray-400 w-10 text-right">
+            {formatTime(displayTime)}
+          </span>
+
+          <div
+            ref={progressRef}
+            className={`flex-1 h-3 bg-gray-600 rounded-full relative group py-1 ${
+              areOtherControlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            }`}
+            onClick={!areOtherControlsDisabled ? handleProgressClick : undefined}
+            onMouseDown={!areOtherControlsDisabled ? handleProgressMouseDown : undefined}
+          >
+            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-600 rounded-full transform -translate-y-1/2">
+              <div
+                className="absolute h-full bg-white rounded-full transition-all group-hover:bg-[#2196F3]"
+                style={{ width: `${progressPercentage}%` }}
+              />
+              {!isDownloading && (
+                <div
+                  className={`absolute h-3 w-3 bg-white rounded-full shadow-lg top-1/2 transform -translate-y-1/2 transition-opacity group-hover:bg-[#2196F3] ${
+                    isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  style={{
+                    left: `${progressPercentage}%`,
+                    transform: "translateX(-50%) translateY(-50%)",
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          <span className="text-xs text-gray-400 w-10">
+            {formatTime(duration)}
+          </span>
+        </div>
+      </div>
+
+      {/* Columna derecha - Control de volumen */}
+      <div className="flex items-center space-x-2 w-1/3 justify-end">
+        <button
+          onClick={toggleMute}
+          className="text-gray-400 hover:text-white transition-colors hover:scale-105"
+          title={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted || volume === 0 ? (
+            <VolumeXIcon className="h-4 w-4" />
+          ) : (
+            <Volume2Icon className="h-4 w-4" />
+          )}
+        </button>
+        <div
+          ref={volumeRef}
+          className="w-24 h-3 bg-gray-600 rounded-full relative cursor-pointer group py-1"
+          onClick={handleVolumeClick}
+          onMouseDown={handleVolumeMouseDown}
+        >
+          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-600 rounded-full transform -translate-y-1/2">
+            <div
+              className="absolute h-full bg-white rounded-full transition-all group-hover:bg-[#2196F3]"
+              style={{ width: `${displayVolume}%` }}
+            />
+            <div
+              className={`absolute h-3 w-3 bg-white rounded-full shadow-lg top-1/2 transform -translate-y-1/2 transition-opacity group-hover:bg-[#2196F3] ${
+                isVolumeDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              style={{ left: `${displayVolume}%`, transform: "translateX(-50%) translateY(-50%)" }}
+            />
           </div>
         </div>
       </div>
