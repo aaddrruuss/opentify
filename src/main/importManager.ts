@@ -474,7 +474,7 @@ class BackgroundImportManager {
     
     // Reutilizar funciones del ipcHandlers
     const getPlaylistsDirectory = () => {
-      return path.join(app.getPath("userData"), "adrus-music", "playlists");
+      return path.join(app.getPath("userData"), "opentify", "playlists");
     };
     
     const sanitizeFileName = (fileName: string): string => {
