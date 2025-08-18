@@ -80,9 +80,9 @@ export function Sidebar({
   }, []);
 
   return (
-    <div className="w-64 bg-black flex flex-col h-full">
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-white">Opentify</h1>
+    <div className="w-64 bg-white dark:bg-black flex flex-col h-full border-r border-gray-200 dark:border-gray-800">
+      <div className="p-6 border-b border-gray-200 dark:border-gray-800">
+        <h1 className="text-2xl font-bold text-black dark:text-white">Opentify</h1>
       </div>
       <nav className="flex-1 px-3">
         <ul className="space-y-2">
@@ -93,8 +93,8 @@ export function Sidebar({
                 <button
                   className={`flex items-center w-full px-3 py-2 text-left transition-colors rounded-md ${
                     currentView === item.id 
-                      ? 'text-white bg-gray-800 font-medium' 
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                      ? 'text-black dark:text-white bg-gray-200 dark:bg-gray-800 font-medium' 
+                      : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50'
                   }`}
                   onClick={() => setCurrentView(item.id)}
                 >
@@ -124,12 +124,12 @@ export function Sidebar({
       )}
 
       {/* Settings and Donation Buttons */}
-      <div className="p-6 border-t border-gray-800 space-y-3 pb-24">
+      <div className="p-6 border-t border-gray-200 dark:border-gray-800 space-y-3 pb-24">
         <button 
           onClick={() => setCurrentView('settings')}
-          className="flex items-center w-full text-sm transition-colors justify-center gap-2 px-4 py-2 bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 hover:text-white"
+          className="flex items-center w-full text-sm transition-colors justify-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-black dark:hover:text-white"
         >
-          <SettingsIcon className="w-5 h-5 text-gray-400" />
+          <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           <span className="font-medium">Configuración</span>
         </button>
 
@@ -143,7 +143,7 @@ export function Sidebar({
               console.error('Error opening donation link:', error);
             }
           }}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-black rounded-md hover:from-blue-500 hover:to-blue-600 transition-all duration-200 font-medium text-sm transform hover:scale-105"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-md hover:from-blue-500 hover:to-blue-600 transition-all duration-200 font-medium text-sm transform hover:scale-105"
         >
           <Heart className="h-4 w-4" />
           Apoyar a Opentify
