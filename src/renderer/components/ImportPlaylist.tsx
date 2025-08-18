@@ -449,9 +449,22 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
                   ¿Cómo obtener el CSV de Spotify?
                 </h3>
                 <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                  <li>1. Ve a tu cuenta de Spotify y solicita tus datos</li>
-                  <li>2. Descarga el archivo CSV de tu playlist</li>
-                  <li>3. Sube el archivo aquí para importar las canciones</li>
+                  <li>1. Ve a <button
+                    onClick={async () => {
+                      try {
+                        if (window.electronAPI?.invoke) {
+                          await window.electronAPI.invoke('open-external-link', 'https://exportify.net/');
+                        }
+                      } catch (error) {
+                        console.error('Error opening exportify link:', error);
+                      }
+                    }}
+                    className="text-blue-600 dark:text-blue-400 underline hover:no-underline cursor-pointer bg-transparent border-none"
+                  >
+                    exportify
+                  </button></li>
+                  <li>2. Descarga el/los archivos CSV de tu playlist</li>
+                  <li>3. Sube tu archivo aquí y espera a que el proceso se complete</li>
                 </ol>
               </div>
 
