@@ -931,7 +931,7 @@ export function App() {
     }), [playlistName, currentTrackIndex, playlist.length]);
 
   return (
-    <div className="flex h-screen w-full bg-black text-white">
+    <div className="flex h-screen w-full bg-white dark:bg-black text-black dark:text-white">
       <Sidebar 
         currentView={currentView} 
         setCurrentView={setCurrentView}
@@ -940,7 +940,7 @@ export function App() {
       />
       
       <div className="flex flex-col flex-1 overflow-hidden">
-        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-900 to-black p-6 pb-24">
+        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-100 to-white dark:from-gray-900 dark:to-black p-6 pb-24">
           <MusicLibrary
             onTrackSelect={handleTrackSelect}
             currentView={currentView}

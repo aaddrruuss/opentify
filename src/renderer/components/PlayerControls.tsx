@@ -217,7 +217,7 @@ export function PlayerControls({
   const areOtherControlsDisabled = isDownloading; // Other controls disabled only during download
 
   return (
-    <div className="bg-black border-t border-gray-800 px-4 py-3 flex items-center justify-between w-full h-20 fixed bottom-0 left-0 right-0 z-40">
+    <div className="bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between w-full h-20 fixed bottom-0 left-0 right-0 z-40">
       {/* Columna izquierda - Información de la canción actual */}
       <div className="flex items-center space-x-3 w-1/3 min-w-0">
         {currentTrack && (
@@ -236,17 +236,17 @@ export function PlayerControls({
                   }}
                 />
               ) : null}
-              <div className={`absolute inset-0 w-14 h-14 bg-gray-600 rounded flex items-center justify-center ${currentTrack.cover ? 'hidden' : 'flex'}`}>
-                <svg className="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+              <div className={`absolute inset-0 w-14 h-14 bg-gray-300 dark:bg-gray-600 rounded flex items-center justify-center ${currentTrack.cover ? 'hidden' : 'flex'}`}>
+                <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM15.657 6.343a1 1 0 011.414 0A9.972 9.972 0 0119 12a9.972 9.972 0 01-1.929 5.657 1 1 0 11-1.414-1.414A7.971 7.971 0 0017 12a7.971 7.971 0 00-1.343-4.243 1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </div>
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-white text-sm font-medium truncate">
+              <div className="text-black dark:text-white text-sm font-medium truncate">
                 {currentTrack.title}
               </div>
-              <div className="text-gray-400 text-xs truncate">
+              <div className="text-gray-600 dark:text-gray-400 text-xs truncate">
                 {currentTrack.artist}
                 {playlistInfo && playlistInfo.total > 1 && (
                   <span> • {playlistInfo.current}/{playlistInfo.total} en "{playlistInfo.name}"</span>
@@ -263,7 +263,7 @@ export function PlayerControls({
         <div className="flex items-center space-x-2 mb-2">
           <button
             className={`transition-colors hover:scale-105 ${
-              isShuffle ? "text-[#2196F3]" : "text-gray-400 hover:text-white"
+              isShuffle ? "text-[#2196F3]" : "text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white"
             } ${areOtherControlsDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={toggleShuffle}
             disabled={areOtherControlsDisabled}
@@ -284,8 +284,8 @@ export function PlayerControls({
           </button>
 
           <button
-            className={`p-2 rounded-full bg-white text-black hover:scale-105 transition-all duration-200 ${
-              isPlayButtonDisabled ? 'opacity-75 cursor-not-allowed' : 'hover:bg-gray-200'
+            className={`p-2 rounded-full bg-black dark:bg-white text-white dark:text-black hover:scale-105 transition-all duration-200 ${
+              isPlayButtonDisabled ? 'opacity-75 cursor-not-allowed' : 'hover:bg-gray-800 dark:hover:bg-gray-200'
             }`}
             onClick={onPlayPause}
             disabled={isPlayButtonDisabled}
@@ -296,7 +296,7 @@ export function PlayerControls({
             }
           >
             {isDownloading || isLoadingAudio ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent" />
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white dark:border-black border-t-transparent" />
             ) : isPlaying ? (
               <PauseIcon className="h-4 w-4" />
             ) : (
@@ -319,7 +319,7 @@ export function PlayerControls({
             className={`transition-colors hover:scale-105 ${
               repeatMode !== "off"
                 ? "text-[#2196F3]"
-                : "text-gray-400 hover:text-white"
+                : "text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white"
             } ${areOtherControlsDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={toggleRepeat}
             disabled={areOtherControlsDisabled}
@@ -338,26 +338,26 @@ export function PlayerControls({
 
         {/* Barra de progreso */}
         <div className="flex items-center w-full space-x-2">
-          <span className="text-xs text-gray-400 w-10 text-right">
+          <span className="text-xs text-gray-600 dark:text-gray-400 w-10 text-right">
             {formatTime(displayTime)}
           </span>
 
           <div
             ref={progressRef}
-            className={`flex-1 h-3 bg-gray-600 rounded-full relative group py-1 ${
+            className={`flex-1 h-3 bg-gray-300 dark:bg-gray-600 rounded-full relative group py-1 ${
               areOtherControlsDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
             }`}
             onClick={!areOtherControlsDisabled ? handleProgressClick : undefined}
             onMouseDown={!areOtherControlsDisabled ? handleProgressMouseDown : undefined}
           >
-            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-600 rounded-full transform -translate-y-1/2">
+            <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-300 dark:bg-gray-600 rounded-full transform -translate-y-1/2">
               <div
-                className="absolute h-full bg-white rounded-full transition-all group-hover:bg-[#2196F3]"
+                className="absolute h-full bg-black dark:bg-white rounded-full transition-all group-hover:bg-[#2196F3]"
                 style={{ width: `${progressPercentage}%` }}
               />
               {!isDownloading && (
                 <div
-                  className={`absolute h-3 w-3 bg-white rounded-full shadow-lg top-1/2 transform -translate-y-1/2 transition-opacity group-hover:bg-[#2196F3] ${
+                  className={`absolute h-3 w-3 bg-black dark:bg-white rounded-full shadow-lg top-1/2 transform -translate-y-1/2 transition-opacity group-hover:bg-[#2196F3] ${
                     isDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                   }`}
                   style={{
@@ -369,7 +369,7 @@ export function PlayerControls({
             </div>
           </div>
 
-          <span className="text-xs text-gray-400 w-10">
+          <span className="text-xs text-gray-600 dark:text-gray-400 w-10">
             {formatTime(duration)}
           </span>
         </div>
@@ -379,7 +379,7 @@ export function PlayerControls({
       <div className="flex items-center space-x-2 w-1/3 justify-end">
         <button
           onClick={toggleMute}
-          className="text-gray-400 hover:text-white transition-colors hover:scale-105"
+          className="text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors hover:scale-105"
           title={isMuted ? "Unmute" : "Mute"}
         >
           {isMuted || volume === 0 ? (
@@ -390,17 +390,17 @@ export function PlayerControls({
         </button>
         <div
           ref={volumeRef}
-          className="w-24 h-3 bg-gray-600 rounded-full relative cursor-pointer group py-1"
+          className="w-24 h-3 bg-gray-300 dark:bg-gray-600 rounded-full relative cursor-pointer group py-1"
           onClick={handleVolumeClick}
           onMouseDown={handleVolumeMouseDown}
         >
-          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-600 rounded-full transform -translate-y-1/2">
+          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gray-300 dark:bg-gray-600 rounded-full transform -translate-y-1/2">
             <div
-              className="absolute h-full bg-white rounded-full transition-all group-hover:bg-[#2196F3]"
+              className="absolute h-full bg-black dark:bg-white rounded-full transition-all group-hover:bg-[#2196F3]"
               style={{ width: `${displayVolume}%` }}
             />
             <div
-              className={`absolute h-3 w-3 bg-white rounded-full shadow-lg top-1/2 transform -translate-y-1/2 transition-opacity group-hover:bg-[#2196F3] ${
+              className={`absolute h-3 w-3 bg-black dark:bg-white rounded-full shadow-lg top-1/2 transform -translate-y-1/2 transition-opacity group-hover:bg-[#2196F3] ${
                 isVolumeDragging ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
               style={{ left: `${displayVolume}%`, transform: "translateX(-50%) translateY(-50%)" }}
