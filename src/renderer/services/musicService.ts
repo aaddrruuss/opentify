@@ -49,7 +49,8 @@ class MusicService {
       this.audio.addEventListener("ended", this.handleEnded);
       this.audio.addEventListener("loadedmetadata", this.handleLoadedMetadata);
 
-      // Configurar volumen actual
+      // Configurar volumen actual y procesamiento de audio
+      this.setupAudioProcessing();
       this.setVolume(this.getCurrentVolume());
 
       // Esperar a que se carguen los metadatos Y esté listo para reproducir
@@ -140,6 +141,8 @@ class MusicService {
       this.audio.removeEventListener("pause", this.handlePause);
       
       if (!preserveState) {
+        // Limpiar nodos de audio antes de eliminar el elemento
+        this.cleanupAudioNodes();
         this.audio.src = "";
         this.audio = null;
       }
@@ -189,26 +192,33 @@ class MusicService {
 
   private currentVolume: number = 80;
   private actualVolume: number = 80; // Volumen real sin considerar mute
+  private audioContext: AudioContext | null = null;
+  private gainNode: GainNode | null = null;
+  private compressorNode: DynamicsCompressorNode | null = null;
+  private sourceNode: MediaElementAudioSourceNode | null = null;
 
   setVolume(volume: number): void {
     this.currentVolume = volume;
     this.actualVolume = volume > 0 ? volume : this.actualVolume; // Preservar el volumen real
     
     if (this.audio) {
-      // Convertir el volumen lineal (0-100) a escala logarítmica para un control más natural
-      let logVolume: number;
+      // Escala de volumen más suave y controlada
+      let adjustedVolume: number;
       
       if (volume === 0) {
-        logVolume = 0;
+        adjustedVolume = 0;
       } else {
-        // Usar una escala logarítmica: log10(volume/10 + 1) / log10(11)
-        logVolume = Math.log10(volume / 10 + 1) / Math.log10(11);
-        
-        // Aplicar una curva adicional para hacer los niveles bajos aún más silenciosos
-        logVolume = Math.pow(logVolume, 2);
+        // Aplicar una escala cúbica para un control más fino en niveles bajos
+        const normalizedVolume = volume / 100;
+        adjustedVolume = Math.pow(normalizedVolume, 2) * 0.4; // Reducir máximo a 30%
       }
       
-      this.audio.volume = Math.max(0, Math.min(1, logVolume));
+      // Aplicar volumen a través del gainNode si existe, sino directamente al audio
+      if (this.gainNode) {
+        this.gainNode.gain.value = adjustedVolume;
+      } else {
+        this.audio.volume = Math.max(0, Math.min(1, adjustedVolume));
+      }
     }
   }
 
@@ -218,6 +228,67 @@ class MusicService {
 
   getActualVolume(): number {
     return this.actualVolume;
+  }
+
+  // Configurar procesamiento de audio con normalización
+  private setupAudioProcessing(): void {
+    if (!this.audio) return;
+
+    try {
+      // Crear AudioContext si no existe
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+
+      // Limpiar nodos anteriores
+      this.cleanupAudioNodes();
+
+      // Crear source node desde el elemento audio
+      this.sourceNode = this.audioContext.createMediaElementSource(this.audio);
+
+      // Crear gain node para control de volumen
+      this.gainNode = this.audioContext.createGain();
+
+      // Crear compresor para normalización de audio
+      this.compressorNode = this.audioContext.createDynamicsCompressor();
+      
+      // Configurar compresor para normalización suave
+      this.compressorNode.threshold.value = -24; // dB
+      this.compressorNode.knee.value = 30; // dB
+      this.compressorNode.ratio.value = 12; // 12:1 ratio
+      this.compressorNode.attack.value = 0.003; // 3ms
+      this.compressorNode.release.value = 0.25; // 250ms
+
+      // Conectar la cadena de audio: source -> compresor -> gain -> destination
+      this.sourceNode.connect(this.compressorNode);
+      this.compressorNode.connect(this.gainNode);
+      this.gainNode.connect(this.audioContext.destination);
+
+      console.log("Audio processing chain configured with normalization");
+    } catch (error) {
+      console.warn("No se pudo configurar el procesamiento de audio:", error);
+      // Fallback a volumen directo si falla Web Audio API
+    }
+  }
+
+  // Limpiar nodos de audio
+  private cleanupAudioNodes(): void {
+    try {
+      if (this.sourceNode) {
+        this.sourceNode.disconnect();
+        this.sourceNode = null;
+      }
+      if (this.gainNode) {
+        this.gainNode.disconnect();
+        this.gainNode = null;
+      }
+      if (this.compressorNode) {
+        this.compressorNode.disconnect();
+        this.compressorNode = null;
+      }
+    } catch (error) {
+      console.warn("Error cleaning up audio nodes:", error);
+    }
   }
 
   getCurrentTime(): number {
@@ -365,7 +436,8 @@ class MusicService {
       this.audio.addEventListener("ended", this.handleEnded);
       this.audio.addEventListener("loadedmetadata", this.handleLoadedMetadata);
 
-      // Configurar volumen actual
+      // Configurar volumen actual y procesamiento de audio
+      this.setupAudioProcessing();
       this.setVolume(this.getCurrentVolume());
 
       // Esperar a que se carguen los metadatos SIN reproducir con timeout
@@ -494,7 +566,8 @@ class MusicService {
       this.audio.addEventListener("playing", this.handlePlaying);
       this.audio.addEventListener("pause", this.handlePause);
 
-      // Configurar volumen actual
+      // Configurar volumen actual y procesamiento de audio
+      this.setupAudioProcessing();
       this.setVolume(this.getCurrentVolume());
 
       // Esperar a que se carguen los metadatos
