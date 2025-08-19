@@ -202,18 +202,15 @@ class MusicService {
     this.actualVolume = volume > 0 ? volume : this.actualVolume; // Preservar el volumen real
     
     if (this.audio) {
-      // Escala de volumen más suave y controlada
       let adjustedVolume: number;
       
       if (volume === 0) {
         adjustedVolume = 0;
       } else {
-        // Aplicar una escala cúbica para un control más fino en niveles bajos
         const normalizedVolume = volume / 100;
-        adjustedVolume = Math.pow(normalizedVolume, 2) * 0.4; // Reducir máximo a 30%
+        adjustedVolume = Math.pow(normalizedVolume, 2) * 0.5; 
       }
       
-      // Aplicar volumen a través del gainNode si existe, sino directamente al audio
       if (this.gainNode) {
         this.gainNode.gain.value = adjustedVolume;
       } else {

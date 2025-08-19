@@ -30,6 +30,7 @@ export interface Settings {
   discordRPCEnabled?: boolean; // NUEVO: Discord Rich Presence
   autoStartup?: 'no' | 'yes' | 'minimized'; // NUEVO: Auto-inicio del sistema
   minimizeToTray?: boolean; // NUEVO: Minimizar a la bandeja del sistema
+  language?: string; // NUEVO: Configuración de idioma
   lastPlayedTrack?: Track | null;
   lastPlayedPosition?: number;
   lastPlayedTime?: number; // timestamp when app was closed

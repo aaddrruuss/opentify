@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Moon, HardDrive, Download, Zap, MessageSquare, Power, Minimize2 } from 'lucide-react';
+import { Sun, Moon, HardDrive, Download, Zap, MessageSquare, Power, Minimize2, Languages } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface SettingsViewProps {
   isDarkMode: boolean;
@@ -48,6 +49,7 @@ export function SettingsView({
   compressionResult,
   setCompressionResult
 }: SettingsViewProps) {
+  const { t, i18n } = useTranslation();
   const [audioQuality, setAudioQuality] = useState<'low' | 'medium' | 'high'>('medium');
   const [storageStats, setStorageStats] = useState<StorageStats>({ totalFiles: 0, totalSizeMB: 0, avgFileSizeMB: 0 });
   const [discordRPCEnabled, setDiscordRPCEnabled] = useState<boolean | null>(null);
@@ -83,11 +85,22 @@ export function SettingsView({
           const minimizeToTrayValue = settings.minimizeToTray !== undefined ? settings.minimizeToTray : false;
           setMinimizeToTray(minimizeToTrayValue);
           console.log(`📱 Minimize to tray cargado: ${minimizeToTrayValue}`);
+
+          // Cargar configuración de idioma
+          const languageValue = settings.language || 'es';
+          if (i18n.language !== languageValue) {
+            await i18n.changeLanguage(languageValue);
+            console.log(`🌐 Idioma cargado: ${languageValue}`);
+          }
         } else {
           // Si no hay API, usar valores por defecto
           setDiscordRPCEnabled(true);
           setAutoStartup('no');
           setMinimizeToTray(false);
+          // Usar español como idioma por defecto
+          if (i18n.language !== 'es') {
+            await i18n.changeLanguage('es');
+          }
           console.log('⚠️ Settings API no disponible, usando valores por defecto');
         }
 
@@ -311,11 +324,27 @@ export function SettingsView({
 
   const getQualityInfo = (quality: 'low' | 'medium' | 'high') => {
     const info = {
-      low: { bitrate: '96K', size: '~1MB/min', description: 'Máxima compresión' },
-      medium: { bitrate: '128K', size: '~1.5MB/min', description: 'Equilibrado' },
-      high: { bitrate: '192K', size: '~2.5MB/min', description: 'Alta calidad' }
+      low: { bitrate: '96K', size: '~1MB/min', description: t('settings.quality_low_desc') },
+      medium: { bitrate: '128K', size: '~1.5MB/min', description: t('settings.quality_medium_desc') },
+      high: { bitrate: '192K', size: '~2.5MB/min', description: t('settings.quality_high_desc') }
     };
     return info[quality];
+  };
+
+  const handleLanguageChange = async (language: string) => {
+    try {
+      await i18n.changeLanguage(language);
+      
+      // Guardar también en el archivo de configuraciones para persistencia
+      if (window.settingsAPI) {
+        const currentSettings = await window.settingsAPI.loadSettings();
+        currentSettings.language = language;
+        await window.settingsAPI.saveSettings(currentSettings);
+        console.log(`💾 Idioma guardado en configuraciones: ${language}`);
+      }
+    } catch (error) {
+      console.error("Error cambiando idioma:", error);
+    }
   };
 
   return (
@@ -323,10 +352,10 @@ export function SettingsView({
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-          Configuración
+          {t('settings.title')}
         </h1>
         <p className="text-gray-600 dark:text-gray-400">
-          Personaliza la apariencia y gestión de almacenamiento
+          {t('settings.description')}
         </p>
       </div>
 
@@ -343,10 +372,10 @@ export function SettingsView({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Apariencia
+                {t('settings.appearance')}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Cambia entre tema claro y oscuro
+                {t('settings.appearance_description')}
               </p>
             </div>
           </div>
@@ -360,10 +389,10 @@ export function SettingsView({
               )}
               <div>
                 <p className="font-medium text-gray-900 dark:text-gray-100">
-                  Modo Oscuro
+                  {t('settings.dark_mode')}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Activa o desactiva el tema oscuro
+                  {t('settings.dark_mode_description')}
                 </p>
               </div>
             </div>
@@ -384,6 +413,55 @@ export function SettingsView({
         </div>
       </div>
 
+      {/* Language Settings */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <Languages className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {t('settings.language')}
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {t('settings.language_description')}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {([
+              { value: 'es', label: t('settings.spanish') },
+              { value: 'en', label: t('settings.english') }
+            ] as const).map((language) => (
+              <div
+                key={language.value}
+                className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  i18n.language === language.value
+                    ? 'border-[#2196F3] bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+                onClick={() => handleLanguageChange(language.value)}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                      {language.label}
+                    </h3>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border-2 ${
+                    i18n.language === language.value 
+                      ? 'bg-[#2196F3] border-[#2196F3]' 
+                      : 'border-gray-300 dark:border-gray-500'
+                  }`} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Discord Rich Presence */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         <div className="p-6">
@@ -393,10 +471,10 @@ export function SettingsView({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Discord Rich Presence
+                {t('settings.discord_rpc')}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Muestra lo que estás escuchando en tu perfil de Discord
+                {t('settings.discord_rpc_description')}
               </p>
             </div>
           </div>
@@ -407,14 +485,14 @@ export function SettingsView({
                 <MessageSquare className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 <div>
                   <p className="font-medium text-gray-900 dark:text-gray-100">
-                    Rich Presence
+                    {t('settings.rich_presence')}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {discordRPCConnected 
-                      ? "Conectado - Mostrando tu música actual" 
+                      ? t('settings.rpc_connected')
                       : discordRPCEnabled 
-                        ? "Habilitado - Intentando conectar..."
-                        : "Deshabilitado"
+                        ? t('settings.rpc_enabled')
+                        : t('settings.rpc_disabled')
                     }
                   </p>
                 </div>
@@ -443,8 +521,7 @@ export function SettingsView({
           {settingsLoaded && discordRPCEnabled === true && (
             <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               <p className="text-sm text-blue-800 dark:text-blue-200">
-                <strong>Nota:</strong> Discord debe estar abierto para mostrar tu actividad musical. 
-                La información se actualiza automáticamente mientras reproduces música.
+                <strong>{t('common.note')}:</strong> {t('settings.discord_note')}
               </p>
             </div>
           )}
@@ -460,10 +537,10 @@ export function SettingsView({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Calidad de Descarga
+                {t('settings.download_quality')}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Configura la compresión de archivos de audio
+                {t('settings.quality_description')}
               </p>
             </div>
           </div>
@@ -484,9 +561,9 @@ export function SettingsView({
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium text-gray-900 dark:text-gray-100 capitalize">
-                        {quality === 'low' && 'Baja'} 
-                        {quality === 'medium' && 'Media'} 
-                        {quality === 'high' && 'Alta'}
+                        {quality === 'low' && t('settings.quality_low')} 
+                        {quality === 'medium' && t('settings.quality_medium')} 
+                        {quality === 'high' && t('settings.quality_high')}
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         {info.bitrate} • {info.size} • {info.description}
@@ -514,10 +591,10 @@ export function SettingsView({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Gestión de Almacenamiento
+                {t('settings.storage_management')}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Optimiza el espacio utilizado por las canciones
+                {t('settings.storage_description')}
               </p>
             </div>
           </div>
@@ -528,19 +605,19 @@ export function SettingsView({
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {storageStats.totalFiles}
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Archivos</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.files')}</p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {storageStats.totalSizeMB}MB
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.total')}</p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-center">
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {storageStats.avgFileSizeMB}MB
               </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Promedio</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.average')}</p>
             </div>
           </div>
 
@@ -607,12 +684,12 @@ export function SettingsView({
               {isCompressing ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Comprimiendo...
+                  {t('settings.compressing')}
                 </>
               ) : (
                 <>
                   <Zap className="h-4 w-4" />
-                  Comprimir Archivos Existentes
+                  {t('settings.compress_existing_files')}
                 </>
               )}
             </button>
@@ -629,10 +706,10 @@ export function SettingsView({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                Configuraciones del Sistema
+                {t('settings.system_settings')}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Controla el comportamiento de la aplicación en tu sistema
+                {t('settings.system_description')}
               </p>
             </div>
           </div>
@@ -646,10 +723,10 @@ export function SettingsView({
                     <Power className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                     <div>
                       <p className="font-medium text-gray-900 dark:text-gray-100">
-                        Iniciar automáticamente al encender el ordenador
+                        {t('settings.auto_startup')}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Configura como se inicia Opentify con tu sistema
+                        {t('settings.auto_startup_description')}
                       </p>
                     </div>
                   </div>
@@ -657,9 +734,9 @@ export function SettingsView({
 
                 <div className="space-y-2">
                   {([
-                    { value: 'no', label: 'No', description: 'No iniciar automáticamente' },
-                    { value: 'yes', label: 'Sí', description: 'Iniciar normalmente' },
-                    { value: 'minimized', label: 'Minimizado', description: 'Iniciar en la bandeja del sistema' }
+                    { value: 'no', label: t('settings.startup_no'), description: t('settings.startup_no_desc') },
+                    { value: 'yes', label: t('settings.startup_yes'), description: t('settings.startup_yes_desc') },
+                    { value: 'minimized', label: t('settings.startup_minimized'), description: t('settings.startup_minimized_desc') }
                   ] as const).map((option) => (
                     <div
                       key={option.value}
@@ -703,10 +780,10 @@ export function SettingsView({
                   <Minimize2 className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                   <div>
                     <p className="font-medium text-gray-900 dark:text-gray-100">
-                      El botón cerrar debe minimizar la aplicación
+                      {t('settings.minimize_to_tray')}
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Al cerrar, mantener la aplicación en la bandeja del sistema
+                      {t('settings.minimize_to_tray_description')}
                     </p>
                   </div>
                 </div>
@@ -734,9 +811,7 @@ export function SettingsView({
             {settingsLoaded && minimizeToTray === true && (
               <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
-                  <strong>Nota:</strong> Cuando esta opción esté activada, cerrar la ventana mantendrá 
-                  la aplicación funcionando en la bandeja del sistema. Puedes acceder a ella haciendo 
-                  clic en el ícono de la bandeja o usar "Salir" desde el menú contextual para cerrarla completamente.
+                  <strong>{t('common.note')}:</strong> {t('settings.minimize_to_tray_note')}
                 </p>
               </div>
             )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Sidebar } from './components/Sidebar';
 import { NowPlaying } from './components/NowPlaying';
 import { MusicLibrary } from './components/MusicLibrary';
@@ -29,6 +30,8 @@ const debounce = (func: Function, wait: number) => {
 };
 
 export function App() {
+  const { t } = useTranslation();
+  
   // Estados básicos
   const [currentView, setCurrentView] = useState('home');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);

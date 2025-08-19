@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Music, Edit2, Check, X, Play, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react';
 import { Track, PlaylistSettings } from '../types/index';
 import { ContextMenu } from './ContextMenu';
@@ -36,6 +37,7 @@ export function PlaylistCard({
   onDeletePlaylist,
   isShuffle
 }: PlaylistCardProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
   const [customImage, setCustomImage] = useState<string | null>(null);
@@ -532,7 +534,7 @@ export function PlaylistCard({
           )}
 
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {tracks.length} canción{tracks.length !== 1 ? 'es' : ''}
+            {t('playlists.song_count', { count: tracks.length })}
           </p>
         </div>
       </div>
@@ -562,7 +564,7 @@ export function PlaylistCard({
                   <div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{name}</h2>
                     <p className="text-gray-500 dark:text-gray-400">
-                      {tracks.length} canción{tracks.length !== 1 ? 'es' : ''}
+                      {t('playlists.song_count', { count: tracks.length })}
                     </p>
                   </div>
                   <button
@@ -620,7 +622,7 @@ export function PlaylistCard({
                   {/* Contador de resultados de búsqueda */}
                   {searchQuery.trim() && (
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {filteredAndSortedTracks.length} de {tracks.length} canciones
+                      {t('playlists.filtered_count', { filtered: filteredAndSortedTracks.length, total: tracks.length })}
                     </div>
                   )}
                 </div>
@@ -635,7 +637,7 @@ export function PlaylistCard({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Buscar canciones..."
+                      placeholder={t('playlists.search_songs')}
                       className="block w-64 pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-[#2196F3] focus:border-[#2196F3] text-sm"
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -682,7 +684,7 @@ export function PlaylistCard({
                               sortType === 'name' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
                             }`}
                           >
-                            Por Nombre (canción)
+                            {t('playlists.sort_by_name')}
                             {sortType === 'name' && (
                               sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                             )}
@@ -693,7 +695,7 @@ export function PlaylistCard({
                               sortType === 'artist' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
                             }`}
                           >
-                            Por Artista
+                            {t('playlists.sort_by_artist')}
                             {sortType === 'artist' && (
                               sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                             )}
@@ -704,7 +706,7 @@ export function PlaylistCard({
                               sortType === 'duration' ? 'bg-blue-50 dark:bg-blue-900/20 text-[#2196F3]' : 'text-gray-700 dark:text-gray-300'
                             }`}
                           >
-                            Por Duración
+                            {t('playlists.sort_by_duration')}
                             {sortType === 'duration' && (
                               sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
                             )}
@@ -791,26 +793,26 @@ export function PlaylistCard({
                     <>
                       <Search className="w-16 h-16 text-gray-400 mb-4" />
                       <p className="text-gray-500 dark:text-gray-400 text-lg">
-                        No se encontraron canciones
+                        {t('playlists.no_songs_found')}
                       </p>
                       <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">
-                        No hay canciones que coincidan con "{searchQuery}"
+                        {t('playlists.no_songs_match', { query: searchQuery })}
                       </p>
                       <button
                         onClick={() => setSearchQuery('')}
                         className="px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
                       >
-                        Limpiar búsqueda
+                        {t('playlists.clear_search')}
                       </button>
                     </>
                   ) : (
                     <>
                       <Music className="w-16 h-16 text-gray-400 mb-4" />
                       <p className="text-gray-500 dark:text-gray-400 text-lg">
-                        Esta playlist está vacía
+                        {t('playlists.empty_playlist')}
                       </p>
                       <p className="text-gray-400 dark:text-gray-500 text-sm">
-                        Agrega algunas canciones para comenzar
+                        {t('playlists.add_songs_to_start')}
                       </p>
                     </>
                   )}

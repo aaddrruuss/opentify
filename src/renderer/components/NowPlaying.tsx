@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Music } from 'lucide-react';
 import { Track } from '../types/index';
 
@@ -14,6 +15,8 @@ interface NowPlayingProps {
 }
 
 export function NowPlaying({ track, isPlaying, isDownloading = false, playlistInfo }: NowPlayingProps) {
+  const { t } = useTranslation();
+  
   return (
     <div className="flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 transition-colors">
       <div className="relative flex-shrink-0">
@@ -52,7 +55,7 @@ export function NowPlaying({ track, isPlaying, isDownloading = false, playlistIn
           {isDownloading && (
             <div className="flex items-center gap-1 text-xs text-blue-500">
               <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-500"></div>
-              <span>Descargando...</span>
+              <span>{t('player.downloading')}</span>
             </div>
           )}
         </div>
@@ -62,11 +65,15 @@ export function NowPlaying({ track, isPlaying, isDownloading = false, playlistIn
           <span>•</span>
           <span>{track.duration}</span>
           
-          {playlistInfo && (playlistInfo.total > 1 || (playlistInfo.name && playlistInfo.name !== "Canción individual" && playlistInfo.name !== "Resultados de búsqueda")) && (
+          {playlistInfo && (playlistInfo.total > 1 || (playlistInfo.name && playlistInfo.name !== t('playlists.single_song', { defaultValue: 'Canción individual' }) && playlistInfo.name !== t('search.results_title', { defaultValue: 'Resultados de búsqueda' }))) && (
             <>
               <span>•</span>
               <span className="truncate">
-                {playlistInfo.current}/{playlistInfo.total} en "{playlistInfo.name}"
+                {t('player.track_in_playlist', { 
+                  current: playlistInfo.current, 
+                  total: playlistInfo.total, 
+                  playlistName: playlistInfo.name 
+                })}
               </span>
             </>
           )}

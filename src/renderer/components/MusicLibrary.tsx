@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo, useCallback, useMemo } from "react";
+import { useTranslation } from 'react-i18next';
 import { TrackList } from "./TrackList";
 import { ImportPlaylist } from "./ImportPlaylist";
 import { PlaylistCard } from "./PlaylistCard";
@@ -54,6 +55,7 @@ export const MusicLibrary = memo(({
   compressionResult: string | null;
   setCompressionResult: (value: string | null) => void;
 }) => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = useState("");
   // Add missing compressionProgress state and setter
   const [compressionProgressState, setCompressionProgress] = useState<{
@@ -431,17 +433,17 @@ export const MusicLibrary = memo(({
     
     return (
       <section>
-        <h2 className="text-2xl font-bold mb-6 text-black dark:text-white">Tus Playlists</h2>
+        <h2 className="text-2xl font-bold mb-6 text-black dark:text-white">{t('playlists.your_playlists')}</h2>
         
         <div className="mb-8">
           <div className="bg-gray-100 dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-300 dark:border-gray-700">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-medium text-black dark:text-white mb-2">
-                  Gestionar Playlists
+                  {t('playlists.manage_playlists')}
                 </h3>
                 <p className="text-gray-700 dark:text-gray-300 text-sm">
-                  Importa tus playlists de Spotify usando archivos CSV exportados desde tu cuenta.
+                  {t('playlists.import_description')}
                 </p>
               </div>
             </div>
@@ -452,7 +454,7 @@ export const MusicLibrary = memo(({
                 className="flex items-center gap-2 px-4 py-2 bg-green-500 text-black rounded-md hover:bg-green-400 transition-colors font-medium"
               >
                 <Upload className="h-4 w-4" />
-                Importar de Spotify
+                {t('playlists.import_from_spotify')}
               </button>
               
               <button
@@ -460,7 +462,7 @@ export const MusicLibrary = memo(({
                 className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-black dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
               >
                 <Plus className="h-4 w-4" />
-                Crear Playlist
+                {t('playlists.create_playlist')}
               </button>
             </div>
           </div>
@@ -528,7 +530,7 @@ export const MusicLibrary = memo(({
                 onClick={() => setShowCreatePlaylistModal(true)}
                 className="px-6 py-3 bg-[#2196F3] text-white rounded-lg hover:bg-blue-600 transition-colors"
               >
-                Crear Nueva Playlist
+                {t('playlists.create_new_playlist')}
               </button>
             </div>
           </div>
@@ -584,23 +586,23 @@ export const MusicLibrary = memo(({
       case "home":
         return (
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Bienvenid@ de nuevo a Opentify</h2>
+            <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">{t('home.welcome_back')}</h2>
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 border dark:border-gray-700">
               <p className="text-gray-600 dark:text-gray-300 mb-4">
-                Encuentra música popular online: las canciones se guardan en caché para una carga rápida y se restaura automáticamente la última pista y posición.
+                {t('home.description')}
               </p>
               <button
                 onClick={() => onSearch("musica 2025")}
                 className="flex items-center gap-2 px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors"
               >
                 <SearchIcon className="w-5 h-5" />
-                Refrescar música popular
+                {t('home.refresh_popular_music')}
               </button>
             </div>
 
             {popularMusic.length > 0 && (
               <section className="mt-8">
-                <h2 className="text-2xl font-bold mb-4 text-black dark:text-white">Canciones más populares:</h2>
+                <h2 className="text-2xl font-bold mb-4 text-black dark:text-white">{t('home.most_popular_songs')}</h2>
                 <TrackList
                   tracks={popularMusic.slice(0, displayedResults)}
                   onTrackSelect={onTrackSelect}
@@ -639,7 +641,7 @@ export const MusicLibrary = memo(({
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Buscar canciones, artistas o álbumes"
+                  placeholder={t('search.placeholder')}
                   className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-black dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   autoFocus
                 />
@@ -649,7 +651,7 @@ export const MusicLibrary = memo(({
                   className="px-6 py-3 bg-blue-500 text-black rounded-md hover:bg-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
                 >
                   <SearchIcon className="h-5 w-5" />
-                  Buscar
+                  {t('search.button')}
                 </button>
               </form>
             </div>
@@ -657,7 +659,7 @@ export const MusicLibrary = memo(({
             {isLoading && (
               <div className="flex justify-center items-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-                <p className="ml-4 text-gray-300">Buscando canciones...</p>
+                <p className="ml-4 text-gray-300">{t('search.searching')}</p>
               </div>
             )}
 
@@ -665,10 +667,10 @@ export const MusicLibrary = memo(({
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-2xl font-bold text-white">
-                    Resultados para "{searchQuery}"
+                    {t('search.results_for', { query: searchQuery })}
                   </h2>
                   <span className="text-sm text-gray-400">
-                    {searchResults.length} canciones encontradas (&lt; 15 min)
+                    {t('search.songs_found', { count: searchResults.length })}
                   </span>
                 </div>
                 <TrackList
@@ -684,10 +686,10 @@ export const MusicLibrary = memo(({
             {!isLoading && searchQuery && searchResults.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-gray-400 mb-2">
-                  No se encontraron canciones para "{searchQuery}"
+                  {t('search.no_results', { query: searchQuery })}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Intenta con términos más específicos. Solo se muestran canciones de menos de 15 minutos.
+                  {t('search.try_specific_terms')}
                 </p>
               </div>
             )}
@@ -696,10 +698,10 @@ export const MusicLibrary = memo(({
               <div className="text-center py-12">
                 <SearchIcon className="h-16 w-16 text-gray-600 mx-auto mb-4" />
                 <p className="text-gray-600 dark:text-gray-400 mb-2">
-                  Busca tu música favorita
+                  {t('search.find_favorite_music')}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Solo se mostrarán canciones de menos de 15 minutos de duración
+                  {t('search.duration_limit')}
                 </p>
               </div>
             )}
@@ -709,7 +711,7 @@ export const MusicLibrary = memo(({
       case "library":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4 text-white">Tu Biblioteca</h2>
+            <h2 className="text-2xl font-bold mb-4 text-white">{t('library.your_library')}</h2>
             {searchResults.length > 0 ? (
               <TrackList 
                 tracks={searchResults} 
@@ -721,7 +723,7 @@ export const MusicLibrary = memo(({
             ) : (
               <div className="bg-gray-800 rounded-lg shadow-sm p-8 text-center border border-gray-700">
                 <p className="text-gray-400">
-                  Tu biblioteca está vacía. Busca música para comenzar.
+                  {t('library.empty_message')}
                 </p>
               </div>
             )}
@@ -734,10 +736,10 @@ export const MusicLibrary = memo(({
       case "liked":
         return (
           <section>
-            <h2 className="text-2xl font-bold mb-4 text-black dark:text-white">Canciones Favoritas</h2>
+            <h2 className="text-2xl font-bold mb-4 text-black dark:text-white">{t('liked.liked_songs')}</h2>
             <div className="bg-gray-100 dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center border border-gray-300 dark:border-gray-700">
               <p className="text-gray-600 dark:text-gray-400">
-                Aún no has marcado canciones como favoritas.
+                {t('liked.no_favorites')}
               </p>
             </div>
           </section>
@@ -765,12 +767,12 @@ export const MusicLibrary = memo(({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h2 className="text-xl font-bold text-black dark:text-white mb-4">
-              Crear Nueva Playlist
+              {t('playlists.create_new_playlist')}
             </h2>
             
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Nombre de la playlist
+                {t('playlists.playlist_name')}
               </label>
               <input
                 type="text"
@@ -783,7 +785,7 @@ export const MusicLibrary = memo(({
                     handleCancelCreatePlaylist();
                   }
                 }}
-                placeholder="Ej: Mi Playlist Favorita"
+                placeholder={t('playlists.name_example')}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-black dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                 autoFocus
                 maxLength={50}
@@ -795,7 +797,7 @@ export const MusicLibrary = memo(({
                 onClick={handleCancelCreatePlaylist}
                 className="px-4 py-2 text-gray-400 hover:text-gray-200 transition-colors"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCreatePlaylist}
@@ -803,7 +805,7 @@ export const MusicLibrary = memo(({
                 className="px-4 py-2 bg-blue-500 text-black rounded-md hover:bg-blue-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
               >
                 <Plus className="h-4 w-4" />
-                Crear Playlist
+                {t('playlists.create_playlist')}
               </button>
             </div>
           </div>

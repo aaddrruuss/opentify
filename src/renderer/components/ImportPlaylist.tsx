@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Upload, FileText, Search, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { Track } from '../types/index';
 
@@ -21,6 +22,7 @@ interface ImportedTrack extends SpotifyTrack {
 }
 
 export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportPlaylistProps) {
+  const { t } = useTranslation();
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [playlistName, setPlaylistName] = useState('');
   const [importedTracks, setImportedTracks] = useState<ImportedTrack[]>([]);
@@ -377,7 +379,7 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            Importar Playlist de Spotify
+            {t('import.import_from_spotify')}
           </h2>
           <button
             onClick={onCancel}
@@ -394,7 +396,7 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Archivo CSV de Spotify
+                    {t('import.csv_file')}
                   </label>
                   <div className="flex items-center justify-center w-full">
                     <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:hover:border-gray-500 dark:hover:bg-gray-600">
@@ -410,10 +412,10 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
                           <>
                             <Upload className="h-8 w-8 text-gray-400 mb-2" />
                             <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                              <span className="font-semibold">Click para subir</span> o arrastra el archivo
+                              <span className="font-semibold">{t('import.click_to_upload')}</span> {t('import.or_drag_file')}
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Archivos CSV de Spotify
+                              {t('import.csv_files')}
                             </p>
                           </>
                         )}
@@ -431,14 +433,14 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
                 {/* Playlist Name */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Nombre de la Playlist
+                    {t('import.playlist_name')}
                   </label>
                   <input
                     type="text"
                     value={playlistName}
                     onChange={(e) => setPlaylistName(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    placeholder="Mi Playlist de Spotify"
+                    placeholder={t('import.default_playlist_name')}
                   />
                 </div>
               </div>
@@ -446,10 +448,10 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
               {/* Instructions */}
               <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
-                  ¿Cómo obtener el CSV de Spotify?
+                  {t('import.how_to_get_csv')}
                 </h3>
                 <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                  <li>1. Ve a <button
+                  <li>1. {t('import.go_to_exportify')} <button
                     onClick={async () => {
                       try {
                         if (window.electronAPI?.invoke) {
@@ -463,8 +465,8 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
                   >
                     exportify
                   </button></li>
-                  <li>2. Descarga el/los archivos CSV de tu playlist</li>
-                  <li>3. Sube tu archivo aquí y espera a que el proceso se complete</li>
+                  <li>2. {t('import.download_csv_files')}</li>
+                  <li>3. {t('import.upload_and_wait')}</li>
                 </ol>
               </div>
 
@@ -475,13 +477,13 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
                   disabled={!csvFile || !playlistName.trim() || isProcessing}
                   className="flex-1 px-4 py-2 bg-[#2196F3] text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isProcessing ? 'Procesando...' : 'Importar Playlist'}
+                  {isProcessing ? t('import.processing') : t('import.import_playlist')}
                 </button>
                 <button
                   onClick={onCancel}
                   className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
               </div>
             </>
@@ -551,13 +553,13 @@ export function ImportPlaylist({ onImportComplete, onCancel, onSearch }: ImportP
                     disabled={foundCount === 0}
                     className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Importar {foundCount} canciones
+                    {t('import.import_songs', { count: foundCount })}
                   </button>
                   <button
                     onClick={onCancel}
                     className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 </div>
               )}
