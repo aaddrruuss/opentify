@@ -36,11 +36,34 @@
       "icon": "assets/images/icon.png"
     },
     "linux": {
-      "icon": "assets/images/icon.png"
+      "icon": "assets/images/icon.png",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        },
+        {
+          "target": "rpm",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "deb": {
+      "depends": ["ffmpeg"]
+    },
+    "rpm": {
+      "depends": ["ffmpeg"]
     }
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "Adrus",
+    "email": "adrus@opentify.com"
+  },
   "license": "ISC",
   "devDependencies": {
     "@babel/core": "^7.28.0",

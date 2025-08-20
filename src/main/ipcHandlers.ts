@@ -51,17 +51,37 @@ if (initialFfmpegPath) {
 function getFFmpegPath(): string | null {
   try {
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    const isLinux = process.platform === 'linux';
+    
+    // En Linux (producción), usar ffmpeg del sistema
+    if (isLinux && !isDev) {
+      // Verificar si ffmpeg está disponible en el sistema
+      try {
+        const { execSync } = require('child_process');
+        const systemFFmpegPath = execSync('which ffmpeg', { encoding: 'utf8' }).trim();
+        if (systemFFmpegPath && fs.existsSync(systemFFmpegPath)) {
+          console.log(`✅ Usando FFmpeg del sistema: ${systemFFmpegPath}`);
+          return systemFFmpegPath;
+        }
+      } catch (error) {
+        console.warn("FFmpeg no encontrado en el sistema Linux");
+      }
+    }
+    
+    // Para Windows o desarrollo: usar ffmpeg-static
+    const ffmpegExtension = process.platform === 'win32' ? '.exe' : '';
+    const ffmpegBinary = `ffmpeg${ffmpegExtension}`;
+    
+    // Primer intento: usar ffmpeg-static directamente
+    if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+      return ffmpegPath;
+    }
     
     if (isDev) {
-      // En desarrollo, usar ffmpeg-static directamente
-      if (ffmpegPath && fs.existsSync(ffmpegPath)) {
-        return ffmpegPath;
-      }
-      
-      // Fallback en desarrollo
+      // En desarrollo, buscar en node_modules
       const devPaths = [
-        path.join(__dirname, "../../node_modules/ffmpeg-static/ffmpeg.exe"),
-        path.join(process.cwd(), "node_modules/ffmpeg-static/ffmpeg.exe")
+        path.join(__dirname, `../../node_modules/ffmpeg-static/${ffmpegBinary}`),
+        path.join(process.cwd(), `node_modules/ffmpeg-static/${ffmpegBinary}`)
       ];
       
       for (const testPath of devPaths) {
@@ -70,13 +90,13 @@ function getFFmpegPath(): string | null {
         }
       }
     } else {
-      // En producción, usar rutas específicas de la aplicación instalada
+      // En producción Windows, buscar en app.asar.unpacked
       const executableDir = path.dirname(process.execPath);
       const resourcesPath = process.resourcesPath;
       
       const prodPaths = [
-        path.join(executableDir, "resources", "app.asar.unpacked", "node_modules", "ffmpeg-static", "ffmpeg.exe"),
-        path.join(resourcesPath, "app.asar.unpacked", "node_modules", "ffmpeg-static", "ffmpeg.exe")
+        path.join(executableDir, "resources", "app.asar.unpacked", "node_modules", "ffmpeg-static", ffmpegBinary),
+        path.join(resourcesPath, "app.asar.unpacked", "node_modules", "ffmpeg-static", ffmpegBinary)
       ];
       
       for (const testPath of prodPaths) {
